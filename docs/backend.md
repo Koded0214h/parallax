@@ -11,7 +11,7 @@ engine (fluxx) consumes what this layer produces and never reaches around it.
 | M1 | `pkg/contracts` | Stable schema: `Event`, `EventType`, `IntentResponse`, `Action`. The agreed contract with fluxx & frontend. | **done** |
 | M2 | `internal/ingest` | Validate structure, canonicalize type, generate `EventID`, stamp `Timestamp` / `IngestedAtNanos`. | **done** |
 | M3 | `internal/session` | Sharded in-memory session store: ordered trajectory, per-session `Seq`, lifecycle metadata. | **done** |
-| M4 | `internal/stream` | In-process event bus: fan-out to workers + frontend subscribers, bounded buffers, backpressure policy. | todo |
+| M4 | `internal/stream` | In-process event bus: hub goroutine, fan-out to workers + frontend + WAL, per-subscription bounded buffers with overflow policy, `Publish` backpressure. | **done** |
 | M5 | `internal/worker` | Bounded worker pool consuming the stream; `Processor` interface fluxx implements (feature / sequence / context). | todo |
 | M6 | `internal/httpapi` | HTTP transport: `POST /v1/events`, `GET /v1/sessions/{id}/intent`, `GET /healthz`. WS `/v1/stream` pending. | **partial** |
 | M7 | `internal/wal` | Offline event buffer + reconnect replay into storage (prd.md §28). | todo |
@@ -51,13 +51,27 @@ POST /v1/events
 - `IntentResponse` is yours to fill; the runtime only transports it. `EventsSeen`
   is set by the runtime.
 
+## stream.Bus notes (M4)
+
+- One hub goroutine owns the subscriber set and every channel send, so callers
+  never race a closed channel. Consumers only `for e := range sub.C()`.
+- `Publish` blocks on a bounded intake queue → backpressure reaches the HTTP
+  handler under load. `TryPublish` is the non-blocking variant.
+- Per-subscription overflow policy: `DropOldest` (frontend — keep latest),
+  `DropNewest`, or `Block`. Use `Block` for **at most one** subscription (the
+  primary consumer); a stalled `Block` consumer stalls the hub for everyone —
+  that is the deliberate end-to-end backpressure knob. A wedged `Block` sub can
+  still be detached (`Unsubscribe`) or the bus closed without deadlock.
+- Counters per sub: `Seen == Received + Dropped` by construction. Bus tracks
+  `Published` and total `Dropped`.
+
 ## Next up
 
-1. **M4 `stream`** — `Bus` with `Publish(Event)` and `Subscribe() <-chan Event`,
-   bounded per-subscriber buffers, drop-oldest or block policy (config).
-2. **M5 `worker`** — `Pool` of N goroutines draining the bus into a `Processor`;
-   graceful drain on shutdown; per-event latency histogram hook.
-3. Wire both into `cmd/gateway` and add `WS /v1/stream` for the frontend.
+1. **M5 `worker`** — `Pool` of N goroutines draining a `Block` bus subscription
+   into a `Processor`; graceful drain on shutdown; per-event latency histogram.
+2. Wire `stream.Bus` into `cmd/gateway`: `httpapi` publishes after
+   `session.Store.Append`; add `WS /v1/stream` (a `DropOldest` subscription) for
+   the frontend.
 
 ## Running
 

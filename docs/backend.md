@@ -12,7 +12,7 @@ engine (fluxx) consumes what this layer produces and never reaches around it.
 | M2 | `internal/ingest` | Validate structure, canonicalize type, generate `EventID`, stamp `Timestamp` / `IngestedAtNanos`. | **done** |
 | M3 | `internal/session` | Sharded in-memory session store: ordered trajectory, per-session `Seq`, lifecycle metadata. | **done** |
 | M4 | `internal/stream` | In-process event bus: hub goroutine, fan-out to workers + frontend + WAL, per-subscription bounded buffers with overflow policy, `Publish` backpressure. | **done** |
-| M5 | `internal/worker` | Bounded worker pool consuming the stream; `Processor` interface fluxx implements (feature / sequence / context). | todo |
+| M5 | `internal/worker` | Bounded worker pool draining a stream subscription; `Processor` interface fluxx implements; panic isolation, graceful/forced drain, latency reservoir (p50/p95/p99). | **done** |
 | M6 | `internal/httpapi` | HTTP transport: `POST /v1/events`, `GET /v1/sessions/{id}/intent`, `GET /healthz`. WS `/v1/stream` pending. | **partial** |
 | M7 | `internal/wal` | Offline event buffer + reconnect replay into storage (prd.md §28). | todo |
 | M8 | `internal/storage` | Persistence interface + in-memory and SQLite implementations. | todo |
@@ -65,13 +65,30 @@ POST /v1/events
 - Counters per sub: `Seen == Received + Dropped` by construction. Bus tracks
   `Published` and total `Dropped`.
 
+## worker.Pool notes (M5)
+
+- `Processor` — `Process(ctx, contracts.Event) error` — is the seam fluxx owns.
+  Must be concurrency-safe and must respect `ctx` (cancelled on a forced stop).
+  `ProcessorFunc` adapts a plain function.
+- Drains a `Source` (`*stream.Subscription` satisfies it) with N workers,
+  default `GOMAXPROCS`.
+- Panic in a `Process` call is recovered per event: counted (`Panicked`,
+  `Failed`), logged with stack, the worker keeps going.
+- `Stop(ctx)` unsubscribes from the source then waits for in-flight work; if
+  `ctx` fires first it cancels the processor context, stops the workers, and
+  returns `ctx.Err()`. Idempotent.
+- `Stats()`: `Workers`, `Processed`, `Failed`, `Panicked`, `InFlight`, and
+  `Latency` (bounded reservoir → exact count/min/max, estimated p50/p95/p99).
+  Source of the pitch's latency numbers.
+
 ## Next up
 
-1. **M5 `worker`** — `Pool` of N goroutines draining a `Block` bus subscription
-   into a `Processor`; graceful drain on shutdown; per-event latency histogram.
-2. Wire `stream.Bus` into `cmd/gateway`: `httpapi` publishes after
-   `session.Store.Append`; add `WS /v1/stream` (a `DropOldest` subscription) for
-   the frontend.
+1. Wire `stream.Bus` + `worker.Pool` into `cmd/gateway`: `httpapi` publishes to
+   the bus after `session.Store.Append`; the pool runs a stub `Processor` for
+   fluxx; add `WS /v1/stream` (a `DropOldest` sub) for the frontend; expose
+   bus + pool `Stats` on `/healthz` or `/v1/metrics`.
+2. **M9 `bench/`** — load generator + latency/throughput harness, pulled forward
+   so the pool's numbers are real for the demo.
 
 ## Running
 

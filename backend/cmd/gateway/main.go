@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/holiday-heartbreaks/parallax/backend/internal/httpapi"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/ingest"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/session"
 )
 
 func main() {
@@ -27,9 +29,16 @@ func main() {
 
 	addr := envOr("PARALLAX_ADDR", ":8080")
 
+	// Runtime state and pipeline collaborators. The intent engine plugs in here later.
+	router := httpapi.NewRouterWithDeps(httpapi.Deps{
+		Logger:     logger,
+		Normalizer: ingest.New(),
+		Sessions:   session.New(),
+	})
+
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewRouter(logger),
+		Handler:           router,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

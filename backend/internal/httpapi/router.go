@@ -1,101 +1,107 @@
-// Package httpapi wires the Parallax HTTP surface for the prototype.
+// Package httpapi wires the Parallax HTTP surface (prd.md §21.1, §21.10).
 //
-// The handlers here are deliberately thin placeholders: they define the
-// request/response contracts the frontend and simulator code against, and
-// keep just enough in-memory state to make the demo flow work. The real
-// feature / sequence / intent / policy engines plug in behind this later.
+// The transport here is real: events are validated and normalized by
+// internal/ingest, then recorded in internal/session. Intent inference is still
+// a placeholder — the intelligence engine plugs into GET .../intent later.
 package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
-	"sync"
-	"time"
+
+	"github.com/holiday-heartbreaks/parallax/backend/internal/ingest"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/session"
+	"github.com/holiday-heartbreaks/parallax/backend/pkg/contracts"
 )
 
-// Event is a single session or transaction event, per prd.md §33.
-type Event struct {
-	SessionID string         `json:"session_id"`
-	UserID    string         `json:"user_id"`
-	Type      string         `json:"type"`
-	Timestamp int64          `json:"timestamp"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
+// Deps are the collaborators a Router needs. NewRouter fills nil fields with
+// production defaults.
+type Deps struct {
+	Logger     *slog.Logger
+	Normalizer *ingest.Normalizer
+	Sessions   *session.Store
 }
 
-// IntentResponse is the current inference for a session, per prd.md §33.
-type IntentResponse struct {
-	Hypotheses  map[string]float64 `json:"hypotheses"`
-	Uncertainty float64            `json:"uncertainty"`
-	Action      string             `json:"action"`
-	Evidence    []string           `json:"evidence"`
-}
-
-// store is a placeholder in-memory session buffer. Not the real state layer.
-type store struct {
-	mu     sync.RWMutex
-	events map[string][]Event
-}
-
-func newStore() *store { return &store{events: make(map[string][]Event)} }
-
-func (s *store) append(e Event) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.events[e.SessionID] = append(s.events[e.SessionID], e)
-	return len(s.events[e.SessionID])
-}
-
-func (s *store) count(sessionID string) int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.events[sessionID])
+func (d *Deps) withDefaults() {
+	if d.Logger == nil {
+		d.Logger = slog.Default()
+	}
+	if d.Normalizer == nil {
+		d.Normalizer = ingest.New()
+	}
+	if d.Sessions == nil {
+		d.Sessions = session.New()
+	}
 }
 
 // NewRouter builds the HTTP handler for the gateway.
 func NewRouter(logger *slog.Logger) http.Handler {
-	st := newStore()
+	return NewRouterWithDeps(Deps{Logger: logger})
+}
+
+// NewRouterWithDeps builds the handler with explicit collaborators.
+func NewRouterWithDeps(d Deps) http.Handler {
+	d.withDefaults()
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":   "ok",
+			"sessions": d.Sessions.Count(),
+		})
 	})
 
 	mux.HandleFunc("POST /v1/events", func(w http.ResponseWriter, r *http.Request) {
-		var e Event
-		if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json"})
+		var raw contracts.Event
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid json")
 			return
 		}
-		if e.SessionID == "" || e.Type == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "session_id and type are required"})
+
+		e, err := d.Normalizer.Normalize(raw)
+		if err != nil {
+			if errors.Is(err, contracts.ErrInvalidEvent) {
+				writeErr(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			d.Logger.Error("normalize failed", "err", err)
+			writeErr(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		if e.Timestamp == 0 {
-			e.Timestamp = time.Now().Unix()
-		}
-		n := st.append(e)
-		logger.Info("event ingested", "session", e.SessionID, "type", e.Type, "seq", n)
-		writeJSON(w, http.StatusAccepted, map[string]any{"session_id": e.SessionID, "events": n})
+
+		stored, count := d.Sessions.Append(e)
+		d.Logger.Info("event ingested",
+			"session", stored.SessionID, "type", stored.Type, "seq", stored.Seq)
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"event_id":   stored.EventID,
+			"session_id": stored.SessionID,
+			"seq":        stored.Seq,
+			"events":     count,
+		})
 	})
 
 	mux.HandleFunc("GET /v1/sessions/{id}/intent", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
-		if st.count(id) == 0 {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown session"})
+		n := d.Sessions.Len(id)
+		if n == 0 {
+			writeErr(w, http.StatusNotFound, "unknown session")
 			return
 		}
-		// Placeholder inference. Replaced by the real intent engine.
-		writeJSON(w, http.StatusOK, IntentResponse{
+		// Placeholder inference. Replaced by the real intent engine (fluxx).
+		writeJSON(w, http.StatusOK, contracts.IntentResponse{
+			SessionID: id,
 			Hypotheses: map[string]float64{
-				"legitimate":         0.25,
-				"accidental":         0.25,
-				"social_engineering": 0.25,
-				"account_takeover":   0.25,
+				contracts.IntentLegitimate:        0.25,
+				contracts.IntentAccidental:        0.25,
+				contracts.IntentSocialEngineering: 0.25,
+				contracts.IntentAccountTakeover:   0.25,
 			},
 			Uncertainty: 1.0,
-			Action:      "PROBE",
+			Action:      contracts.ActionProbe,
 			Evidence:    []string{"inference_engine_not_wired_yet"},
+			EventsSeen:  n,
 		})
 	})
 
@@ -106,6 +112,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func writeErr(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
 }
 
 // withCORS allows the Vite dev server to call the gateway during development.

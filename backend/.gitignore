@@ -1,0 +1,8 @@
+# Build output
+/bin/
+/gateway
+*.exe
+
+# Test artifacts
+*.out
+coverage.*

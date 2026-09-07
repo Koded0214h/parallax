@@ -210,6 +210,18 @@ GET /v1/sessions/{session_id}/intent
 }
 ```
 
+Observe the live stream (Server-Sent Events; optional `?session_id=` filter):
+
+```http
+GET /v1/stream
+```
+
+Runtime counters — throughput, drops, worker-pool p50/p95/p99:
+
+```http
+GET /v1/metrics
+```
+
 ---
 
 ## Performance targets

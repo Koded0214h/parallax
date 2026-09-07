@@ -13,7 +13,7 @@ engine (fluxx) consumes what this layer produces and never reaches around it.
 | M3 | `internal/session` | Sharded in-memory session store: ordered trajectory, per-session `Seq`, lifecycle metadata. | **done** |
 | M4 | `internal/stream` | In-process event bus: hub goroutine, fan-out to workers + frontend + WAL, per-subscription bounded buffers with overflow policy, `Publish` backpressure. | **done** |
 | M5 | `internal/worker` | Bounded worker pool draining a stream subscription; `Processor` interface fluxx implements; panic isolation, graceful/forced drain, latency reservoir (p50/p95/p99). | **done** |
-| M6 | `internal/httpapi` | HTTP transport: `POST /v1/events`, `GET /v1/sessions/{id}/intent`, `GET /healthz`. WS `/v1/stream` pending. | **partial** |
+| M6 | `internal/httpapi` + `cmd/gateway` | HTTP transport wired end to end: `POST /v1/events` → ingest → session → bus → pool; `GET /v1/stream` (SSE); `GET /v1/metrics`, `GET /healthz` (bus + pool counters); `GET /v1/sessions/{id}/intent` (placeholder). | **done** |
 | M7 | `internal/wal` | Offline event buffer + reconnect replay into storage (prd.md §28). | todo |
 | M8 | `internal/storage` | Persistence interface + in-memory and SQLite implementations. | todo |
 | M9 | `bench/` | Load generator + latency/throughput harness: events/sec, p50/p95/p99, CPU, mem. | todo |
@@ -30,15 +30,20 @@ POST /v1/events
  session.Store.Append          ── assigns per-session Seq, appends to trajectory
       │
       ▼
- stream.Bus.Publish (M4)       ── fan-out
+ stream.Bus.Publish (M4)       ── fan-out (blocks on bounded intake => backpressure)
       │
-      ├──────────────┬──────────────┐
-      ▼              ▼              ▼
- worker pool (M5)  frontend WS   wal (M7)
-      │
-      ▼
- Processor (fluxx: feature / sequence / context / intent)
+      ├────────────────────┬────────────────────┐
+      ▼                    ▼                    ▼
+ worker pool (M5)     GET /v1/stream        wal (M7, todo)
+ Block sub            SSE, DropOldest sub
+      │                    │
+      ▼                    ▼
+ Processor            frontend
+ (fluxx: feature / sequence / context / intent)
 ```
+
+`GET /v1/metrics` and `GET /healthz` return `stream.Bus.Stats()` and
+`worker.Pool.Stats()` (throughput, drops, p50/p95/p99).
 
 ## Contract notes for fluxx
 
@@ -83,12 +88,12 @@ POST /v1/events
 
 ## Next up
 
-1. Wire `stream.Bus` + `worker.Pool` into `cmd/gateway`: `httpapi` publishes to
-   the bus after `session.Store.Append`; the pool runs a stub `Processor` for
-   fluxx; add `WS /v1/stream` (a `DropOldest` sub) for the frontend; expose
-   bus + pool `Stats` on `/healthz` or `/v1/metrics`.
-2. **M9 `bench/`** — load generator + latency/throughput harness, pulled forward
-   so the pool's numbers are real for the demo.
+1. **M9 `bench/`** — load generator + latency/throughput harness (`events/sec`,
+   p50/p95/p99, alloc/op) hitting `POST /v1/events` and the in-process pipeline
+   directly. Makes the pool's numbers real for the demo.
+2. Hand fluxx the `Processor` seam: replace the stub in `cmd/gateway` with the
+   real feature/sequence/intent chain; back `GET .../intent` with its output.
+3. **M7 `wal`** + **M8 `storage`** — offline buffering and persistence.
 
 ## Running
 

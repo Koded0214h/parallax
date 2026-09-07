@@ -36,4 +36,26 @@ export const api = {
     fetch(`/v1/sessions/${encodeURIComponent(sessionId)}/intent`).then((r) =>
       json<IntentResponse>(r),
     ),
+
+  /**
+   * Subscribe to the live event stream (SSE). Pass a sessionId to filter.
+   * Returns an unsubscribe function.
+   */
+  streamEvents(
+    onEvent: (e: ParallaxEvent) => void,
+    sessionId?: string,
+  ): () => void {
+    const url = sessionId
+      ? `/v1/stream?session_id=${encodeURIComponent(sessionId)}`
+      : '/v1/stream'
+    const es = new EventSource(url)
+    es.onmessage = (m) => {
+      try {
+        onEvent(JSON.parse(m.data) as ParallaxEvent)
+      } catch {
+        /* ignore keep-alive / malformed frames */
+      }
+    }
+    return () => es.close()
+  },
 }

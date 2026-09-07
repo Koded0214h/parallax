@@ -1,27 +1,36 @@
 // Package httpapi wires the Parallax HTTP surface (prd.md §21.1, §21.10).
 //
-// The transport here is real: events are validated and normalized by
-// internal/ingest, then recorded in internal/session. Intent inference is still
-// a placeholder — the intelligence engine plugs into GET .../intent later.
+// Ingest path: POST /v1/events -> ingest.Normalizer -> session.Store -> (if a
+// Bus is configured) stream.Bus. Observability: GET /v1/stream is a
+// Server-Sent Events feed of the live event stream; GET /v1/metrics exposes
+// bus and worker-pool counters. Intent inference is still a placeholder — the
+// intelligence engine plugs into GET .../intent later.
 package httpapi
 
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/holiday-heartbreaks/parallax/backend/internal/ingest"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/session"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/stream"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/worker"
 	"github.com/holiday-heartbreaks/parallax/backend/pkg/contracts"
 )
 
 // Deps are the collaborators a Router needs. NewRouter fills nil fields with
-// production defaults.
+// production defaults. Bus and Pool are optional: without a Bus, events are
+// still ingested and stored but not published, and /v1/stream is not served.
 type Deps struct {
 	Logger     *slog.Logger
 	Normalizer *ingest.Normalizer
 	Sessions   *session.Store
+	Bus        *stream.Bus
+	Pool       *worker.Pool
 }
 
 func (d *Deps) withDefaults() {
@@ -47,10 +56,11 @@ func NewRouterWithDeps(d Deps) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status":   "ok",
-			"sessions": d.Sessions.Count(),
-		})
+		writeJSON(w, http.StatusOK, d.snapshot("ok"))
+	})
+
+	mux.HandleFunc("GET /v1/metrics", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, d.snapshot(""))
 	})
 
 	mux.HandleFunc("POST /v1/events", func(w http.ResponseWriter, r *http.Request) {
@@ -72,6 +82,9 @@ func NewRouterWithDeps(d Deps) http.Handler {
 		}
 
 		stored, count := d.Sessions.Append(e)
+		if d.Bus != nil {
+			d.Bus.Publish(stored) // bounded intake => backpressure to the caller
+		}
 		d.Logger.Info("event ingested",
 			"session", stored.SessionID, "type", stored.Type, "seq", stored.Seq)
 		writeJSON(w, http.StatusAccepted, map[string]any{
@@ -105,7 +118,79 @@ func NewRouterWithDeps(d Deps) http.Handler {
 		})
 	})
 
+	if d.Bus != nil {
+		mux.HandleFunc("GET /v1/stream", d.handleStream)
+	}
+
 	return withCORS(mux)
+}
+
+// handleStream is a Server-Sent Events feed of the live event stream. An
+// optional ?session_id= filters to one session. Each client gets its own
+// DropOldest subscription, so a slow reader only lags itself.
+func (d Deps) handleStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeErr(w, http.StatusInternalServerError, "streaming unsupported")
+		return
+	}
+	filter := r.URL.Query().Get("session_id")
+
+	sub := d.Bus.Subscribe("sse:"+r.RemoteAddr,
+		stream.WithPolicy(stream.DropOldest), stream.WithBuffer(256))
+	defer sub.Unsubscribe()
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
+
+	ping := time.NewTicker(15 * time.Second)
+	defer ping.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ping.C:
+			fmt.Fprint(w, ": ping\n\n")
+			flusher.Flush()
+		case e, ok := <-sub.C():
+			if !ok {
+				return
+			}
+			if filter != "" && e.SessionID != filter {
+				continue
+			}
+			payload, err := json.Marshal(e)
+			if err != nil {
+				continue
+			}
+			// Unnamed event so the browser's EventSource.onmessage receives it;
+			// the type is in the payload.
+			fmt.Fprintf(w, "data: %s\n\n", payload)
+			flusher.Flush()
+		}
+	}
+}
+
+// snapshot builds the /healthz and /v1/metrics body. status is included when
+// non-empty.
+func (d Deps) snapshot(status string) map[string]any {
+	m := map[string]any{"sessions": d.Sessions.Count()}
+	if status != "" {
+		m["status"] = status
+	}
+	if d.Bus != nil {
+		m["bus"] = d.Bus.Stats()
+	}
+	if d.Pool != nil {
+		m["pool"] = d.Pool.Stats()
+	}
+	return m
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

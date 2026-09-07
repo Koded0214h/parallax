@@ -238,10 +238,27 @@ func (b *Bus) run() {
 		case res := <-b.count:
 			res <- len(b.subs)
 		case <-b.closing:
+			b.drainIntake() // deliver events already accepted by Publish
 			for s := range b.subs {
 				close(s.ch)
 			}
 			b.subs = nil
+			return
+		}
+	}
+}
+
+// drainIntake flushes events sitting in the intake queue at close time. Block
+// deliveries fall through immediately here because b.closing is already closed.
+func (b *Bus) drainIntake() {
+	for {
+		select {
+		case e := <-b.intake:
+			b.published.Add(1)
+			for s := range b.subs {
+				b.deliver(s, e)
+			}
+		default:
 			return
 		}
 	}

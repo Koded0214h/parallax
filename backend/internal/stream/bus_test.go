@@ -259,6 +259,26 @@ func TestStatsAfterCloseDoesNotHang(t *testing.T) {
 	}
 }
 
+func TestCloseDrainsAlreadyAcceptedEvents(t *testing.T) {
+	b := New(Options{})
+	sub := b.Subscribe("a", WithBuffer(64))
+	for i := uint64(1); i <= 10; i++ {
+		b.Publish(ev(i))
+	}
+	b.Close() // must flush the intake queue before shutting the hub
+
+	if got := b.Stats().Published; got != 10 {
+		t.Errorf("Published = %d, want 10 after drain-on-close", got)
+	}
+	got := 0
+	for range sub.C() {
+		got++
+	}
+	if got != 10 {
+		t.Errorf("subscriber received %d events, want 10", got)
+	}
+}
+
 func TestCloseWhileHubWedgedOnBlockSub(t *testing.T) {
 	b := New(Options{Intake: 2})
 	b.Subscribe("stuck", WithBuffer(1), WithPolicy(Block)) // never read

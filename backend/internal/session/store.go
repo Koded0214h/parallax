@@ -148,3 +148,13 @@ func (s *Store) Count() int {
 	}
 	return total
 }
+
+// Reset clears all sessions across all shards.
+func (s *Store) Reset() {
+	for _, sh := range s.shards {
+		sh.mu.Lock()
+		sh.m = make(map[string]*Session)
+		sh.mu.Unlock()
+	}
+}
+

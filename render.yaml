@@ -1,0 +1,28 @@
+services:
+  # Backend API Gateway
+  - type: web
+    name: parallax-backend
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PARALLAX_ADDR
+        value: :8080
+
+  # Frontend Static Site
+  - type: web
+    name: parallax-frontend
+    env: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://parallax-backend.onrender.com

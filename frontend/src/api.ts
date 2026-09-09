@@ -7,6 +7,23 @@ import type {
   IntentResponse,
   ParallaxEvent,
   Scenario,
+  ScenarioInfo,
+  ScenarioRunResult,
+} from './types'
+
+export type {
+  EventType,
+  GatewayMetrics,
+  IntentClass,
+  IntentResponse,
+  ParallaxEvent,
+  PolicyAction,
+  ProbeOption,
+  ProbePayload,
+  Scenario,
+  ScenarioInfo,
+  ScenarioRunResult,
+  ScenarioStep,
 } from './types'
 
 async function json<T>(res: Response): Promise<T> {
@@ -15,7 +32,10 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  health: () => fetch('/healthz').then((r) => json<{ status: string; sessions: number }>(r)),
+  health: () =>
+    fetch('/health').then((r) =>
+      json<{ status: string; uptime_seconds?: number; sessions?: number }>(r),
+    ),
 
   metrics: () => fetch('/v1/metrics').then((r) => json<GatewayMetrics>(r)),
 
@@ -24,13 +44,47 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(e),
-    }).then((r) => json<{ event_id: string; session_id: string; seq: number; events: number }>(r)),
+    }).then((r) =>
+      json<{ session_id: string; events: number; seq: number; event_id: string }>(r),
+    ),
 
   intent: (sessionId: string) =>
     fetch(`/v1/sessions/${encodeURIComponent(sessionId)}/intent`).then((r) =>
       json<IntentResponse>(r),
     ),
 
+  respondProbe: (sessionId: string, responseText: string) =>
+    fetch(`/v1/probes/respond`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, response: responseText }),
+    }).then((r) => json<IntentResponse>(r)),
+
+  getScenarios: () =>
+    fetch('/v1/scenarios').then((r) => json<{ scenarios: ScenarioInfo[] }>(r)),
+
+  runScenario: (scenarioId: string) =>
+    fetch(`/v1/scenarios/${encodeURIComponent(scenarioId)}/run`, {
+      method: 'POST',
+    }).then((r) => json<ScenarioRunResult>(r)),
+
+  getBaseline: (userId: string) =>
+    fetch(`/v1/baselines/${encodeURIComponent(userId)}`).then((r) =>
+      json<Record<string, unknown>>(r),
+    ),
+
+  resetState: () =>
+    fetch('/v1/reset', {
+      method: 'POST',
+    }).then((r) => json<{ status: string; message: string }>(r)),
+
+  getEvaluation: () =>
+    fetch('/v1/evaluation').then((r) => json<Record<string, unknown>>(r)),
+
+  /**
+   * Subscribe to the live event stream (SSE). Pass a sessionId to filter.
+   * Returns an unsubscribe function.
+   */
   streamEvents(
     onEvent: (e: ParallaxEvent) => void,
     onStatusChange?: (connected: boolean) => void,

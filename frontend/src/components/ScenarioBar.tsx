@@ -1,5 +1,6 @@
 import type { Scenario } from '../types'
 import {
+  ActivityIcon,
   PauseIcon,
   PlayIcon,
   ResetIcon,
@@ -15,6 +16,9 @@ interface ScenarioBarProps {
   onTogglePlay: () => void
   onStepForward: () => void
   onReset: () => void
+  backendHealthy?: boolean
+  backendRunning?: boolean
+  onRunBackend?: () => void
 }
 
 export function ScenarioBar({
@@ -26,6 +30,9 @@ export function ScenarioBar({
   onTogglePlay,
   onStepForward,
   onReset,
+  backendHealthy,
+  backendRunning,
+  onRunBackend,
 }: ScenarioBarProps) {
   const totalSteps = activeScenario.steps.length
   const isFinished = currentStepIndex >= totalSteps
@@ -62,6 +69,7 @@ export function ScenarioBar({
         </div>
 
         <div className="controls-group">
+          {/* Step-by-Step Play/Pause */}
           <button
             onClick={onTogglePlay}
             disabled={isFinished}
@@ -81,6 +89,7 @@ export function ScenarioBar({
             )}
           </button>
 
+          {/* Single Step Forward */}
           <button
             onClick={onStepForward}
             disabled={isFinished || isPlaying}
@@ -91,6 +100,20 @@ export function ScenarioBar({
             <span>STEP</span>
           </button>
 
+          {/* Run End-to-End on Live Go Gateway */}
+          {backendHealthy && onRunBackend && (
+            <button
+              onClick={onRunBackend}
+              disabled={backendRunning}
+              className={`control-btn run-gateway ${backendRunning ? 'loading' : ''}`}
+              title="Run entire scenario end-to-end directly on the live Go gateway pipeline (POST /v1/scenarios/:id/run)"
+            >
+              <ActivityIcon size={12} />
+              <span>{backendRunning ? 'RUNNING...' : 'RUN ON GATEWAY'}</span>
+            </button>
+          )}
+
+          {/* Reset */}
           <button
             onClick={onReset}
             className="control-btn reset"
@@ -102,7 +125,7 @@ export function ScenarioBar({
         </div>
 
         <div className="keyboard-hints font-mono">
-          <span className="hint-pill">1-4</span>
+          <span className="hint-pill">1-5</span>
           <span className="hint-pill">SPACE</span>
           <span className="hint-pill">R</span>
         </div>

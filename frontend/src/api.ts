@@ -3,6 +3,8 @@
 // demonstration scenarios matching prd.md §23, §24.
 
 import type {
+  CustomerBaseline,
+  EvaluationReport,
   GatewayMetrics,
   IntentResponse,
   ParallaxEvent,
@@ -12,10 +14,16 @@ import type {
 } from './types'
 
 export type {
+  ClassMetrics,
+  ConfusionMatrix,
+  CustomerBaseline,
+  EvaluationReport,
   EventType,
   GatewayMetrics,
   IntentClass,
   IntentResponse,
+  KnownBeneficiary,
+  KnownDevice,
   ParallaxEvent,
   PolicyAction,
   ProbeOption,
@@ -26,21 +34,25 @@ export type {
   ScenarioStep,
 } from './types'
 
+const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')
+
 async function json<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json() as Promise<T>
 }
 
 export const api = {
+  baseUrl: API_BASE,
+
   health: () =>
-    fetch('/health').then((r) =>
+    fetch(`${API_BASE}/health`).then((r) =>
       json<{ status: string; uptime_seconds?: number; sessions?: number }>(r),
     ),
 
-  metrics: () => fetch('/v1/metrics').then((r) => json<GatewayMetrics>(r)),
+  metrics: () => fetch(`${API_BASE}/v1/metrics`).then((r) => json<GatewayMetrics>(r)),
 
   sendEvent: (e: ParallaxEvent) =>
-    fetch('/v1/events', {
+    fetch(`${API_BASE}/v1/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(e),
@@ -49,37 +61,37 @@ export const api = {
     ),
 
   intent: (sessionId: string) =>
-    fetch(`/v1/sessions/${encodeURIComponent(sessionId)}/intent`).then((r) =>
+    fetch(`${API_BASE}/v1/sessions/${encodeURIComponent(sessionId)}/intent`).then((r) =>
       json<IntentResponse>(r),
     ),
 
   respondProbe: (sessionId: string, responseText: string) =>
-    fetch(`/v1/probes/respond`, {
+    fetch(`${API_BASE}/v1/probes/respond`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, response: responseText }),
     }).then((r) => json<IntentResponse>(r)),
 
   getScenarios: () =>
-    fetch('/v1/scenarios').then((r) => json<{ scenarios: ScenarioInfo[] }>(r)),
+    fetch(`${API_BASE}/v1/scenarios`).then((r) => json<{ scenarios: ScenarioInfo[] }>(r)),
 
   runScenario: (scenarioId: string) =>
-    fetch(`/v1/scenarios/${encodeURIComponent(scenarioId)}/run`, {
+    fetch(`${API_BASE}/v1/scenarios/${encodeURIComponent(scenarioId)}/run`, {
       method: 'POST',
     }).then((r) => json<ScenarioRunResult>(r)),
 
   getBaseline: (userId: string) =>
-    fetch(`/v1/baselines/${encodeURIComponent(userId)}`).then((r) =>
-      json<Record<string, unknown>>(r),
+    fetch(`${API_BASE}/v1/baselines/${encodeURIComponent(userId)}`).then((r) =>
+      json<CustomerBaseline>(r),
     ),
 
   resetState: () =>
-    fetch('/v1/reset', {
+    fetch(`${API_BASE}/v1/reset`, {
       method: 'POST',
     }).then((r) => json<{ status: string; message: string }>(r)),
 
   getEvaluation: () =>
-    fetch('/v1/evaluation').then((r) => json<Record<string, unknown>>(r)),
+    fetch(`${API_BASE}/v1/evaluation`).then((r) => json<EvaluationReport>(r)),
 
   /**
    * Subscribe to the live event stream (SSE). Pass a sessionId to filter.
@@ -91,8 +103,8 @@ export const api = {
     sessionId?: string,
   ): () => void {
     const url = sessionId
-      ? `/v1/stream?session_id=${encodeURIComponent(sessionId)}`
-      : '/v1/stream'
+      ? `${API_BASE}/v1/stream?session_id=${encodeURIComponent(sessionId)}`
+      : `${API_BASE}/v1/stream`
     let es: EventSource | null = null
     let active = true
 
@@ -742,6 +754,50 @@ export const DEMO_SCENARIOS: Scenario[] = [
           ],
           events_seen: 3,
           explanation: 'Amount (£5,500) represents exactly 100× normal utility invoice (£55). Frantic keystroke edits detected. Probability strongly favors accidental slip.',
+        },
+      },
+    ],
+  },
+
+  {
+    id: 'scenario-e',
+    code: 'E',
+    name: 'Ambiguous Session',
+    tagline: 'Early telemetry, sparse evidence, high entropy boundary',
+    description:
+      'Session initiated with minimal interaction telemetry. System preserves high uncertainty rather than prematurely declaring intent.',
+    targetAction: 'VERIFY',
+    targetIntentClass: 'legitimate',
+    steps: [
+      {
+        delayMs: 400,
+        event: {
+          session_id: 'sess_ambig_909',
+          user_id: 'usr_tariq_mansour',
+          type: 'LOGIN',
+          metadata: {
+            device_id: 'device_primary',
+            ip_reputation: 'datacenter_vpn_residential',
+          },
+        },
+        targetIntent: {
+          session_id: 'sess_ambig_909',
+          hypotheses: {
+            legitimate: 0.25,
+            accidental: 0.25,
+            social_engineering: 0.25,
+            account_takeover: 0.25,
+          },
+          uncertainty: 0.95,
+          action: 'VERIFY',
+          evidence: [
+            'sparse_session_telemetry_single_event',
+            'ambiguous_ip_reputation_mixed_asn',
+            'entropy_near_maximum_need_more_evidence',
+          ],
+          events_seen: 1,
+          explanation:
+            'Early session observation. Evidence is insufficient to discriminate between legitimate, ATO, or social engineering hypotheses. System preserves high uncertainty rather than guessing.',
         },
       },
     ],

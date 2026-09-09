@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, DEMO_SCENARIOS } from './api'
+import { BaselineModal } from './components/BaselineModal'
 import { DecisionPanel } from './components/DecisionPanel'
+import { EvaluationModal } from './components/EvaluationModal'
 import { EventTimeline } from './components/EventTimeline'
 import { Header } from './components/Header'
 import { IntentDistribution } from './components/IntentDistribution'
@@ -25,6 +27,10 @@ export default function App() {
   const [backendHealthy, setBackendHealthy] = useState<boolean>(false)
   const [isStreaming, setIsStreaming] = useState<boolean>(false)
   const [metrics, setMetrics] = useState<GatewayMetrics | null>(null)
+  const [backendRunning, setBackendRunning] = useState<boolean>(false)
+
+  const [showBaselineModal, setShowBaselineModal] = useState<boolean>(false)
+  const [showEvaluationModal, setShowEvaluationModal] = useState<boolean>(false)
 
   const timerRef = useRef<number | null>(null)
 
@@ -115,9 +121,18 @@ export default function App() {
       event_id: `evt_${Math.random().toString(36).substring(2, 9)}`,
     }
 
-    // Try posting to Go gateway if online
+    // Try posting to Go gateway if online, and retrieve live intent inference
     if (backendHealthy) {
-      api.sendEvent(enrichedEvent).catch(() => {})
+      api
+        .sendEvent(enrichedEvent)
+        .then(() => api.intent(enrichedEvent.session_id))
+        .then((liveIntent) => {
+          if (liveIntent) {
+            setPrevIntent(intent)
+            setIntent(liveIntent)
+          }
+        })
+        .catch(() => {})
     }
 
     setEvents((prev) => [...prev, enrichedEvent])
@@ -157,7 +172,11 @@ export default function App() {
     setEvents([])
     setPrevIntent(null)
     setIntent(null)
-  }, [])
+
+    if (backendHealthy) {
+      api.resetState().catch(() => {})
+    }
+  }, [backendHealthy])
 
   // Switch scenario
   const handleSelectScenario = useCallback(
@@ -172,6 +191,47 @@ export default function App() {
     },
     [],
   )
+
+  // One-click live execution on Go gateway
+  const runScenarioOnBackend = useCallback(async () => {
+    if (!backendHealthy) return
+
+    const idMap: Record<string, string> = {
+      'scenario-a': 'legitimate',
+      'scenario-b': 'account_takeover',
+      'scenario-c': 'social_engineering',
+      'scenario-d': 'accidental',
+      'scenario-e': 'ambiguous',
+    }
+    const backendScenarioId = idMap[activeScenario.id] || 'social_engineering'
+
+    setBackendRunning(true)
+    setIsPlaying(false)
+    if (timerRef.current) clearTimeout(timerRef.current)
+
+    try {
+      const res = await api.runScenario(backendScenarioId)
+      if (res && res.intent) {
+        setPrevIntent(intent)
+        setIntent(res.intent)
+
+        // Populate events matching the executed scenario steps
+        const generatedEvents = activeScenario.steps.map((s, idx) => ({
+          ...s.event,
+          session_id: res.session_id,
+          timestamp: Date.now() - (activeScenario.steps.length - idx) * 1000,
+          seq: idx + 1,
+          event_id: `evt_live_${idx + 1}_${Math.random().toString(36).substring(2, 7)}`,
+        }))
+        setEvents(generatedEvents)
+        setCurrentStepIndex(activeScenario.steps.length)
+      }
+    } catch {
+      // Keep existing manual state if remote call has issues
+    } finally {
+      setBackendRunning(false)
+    }
+  }, [backendHealthy, activeScenario, intent])
 
   // Interactive Intent Probe reply
   const handleAnswerProbe = useCallback(
@@ -195,8 +255,17 @@ export default function App() {
         },
       }
 
+      // If backend is healthy, dispatch live probe response and get recalculated intent
       if (backendHealthy) {
-        api.sendEvent(responseEvent).catch(() => {})
+        api
+          .respondProbe(currentSessionId, responseTxt)
+          .then((liveIntent) => {
+            if (liveIntent) {
+              setPrevIntent(intent)
+              setIntent(liveIntent)
+            }
+          })
+          .catch(() => {})
       }
 
       setEvents((prev) => [...prev, responseEvent])
@@ -239,6 +308,8 @@ export default function App() {
         handleSelectScenario(DEMO_SCENARIOS[2])
       } else if (e.key === '4') {
         handleSelectScenario(DEMO_SCENARIOS[3])
+      } else if (e.key === '5' && DEMO_SCENARIOS[4]) {
+        handleSelectScenario(DEMO_SCENARIOS[4])
       } else if (e.code === 'Space') {
         e.preventDefault()
         stepForward()
@@ -261,6 +332,8 @@ export default function App() {
         metrics={metrics}
         eventCount={events.length}
         onResetSession={resetSession}
+        onOpenBaseline={() => setShowBaselineModal(true)}
+        onOpenEvaluation={() => setShowEvaluationModal(true)}
       />
 
       <ScenarioBar
@@ -272,6 +345,9 @@ export default function App() {
         onTogglePlay={() => setIsPlaying((p) => !p)}
         onStepForward={stepForward}
         onReset={resetSession}
+        backendHealthy={backendHealthy}
+        backendRunning={backendRunning}
+        onRunBackend={runScenarioOnBackend}
       />
 
       <main className="dashboard-grid">
@@ -290,6 +366,19 @@ export default function App() {
           <DecisionPanel intent={intent} onAnswerProbe={handleAnswerProbe} />
         </section>
       </main>
+
+      {/* Customer Baseline Inspector Modal */}
+      <BaselineModal
+        userId={currentUserId}
+        isOpen={showBaselineModal}
+        onClose={() => setShowBaselineModal(false)}
+      />
+
+      {/* Model Evaluation Audit Modal */}
+      <EvaluationModal
+        isOpen={showEvaluationModal}
+        onClose={() => setShowEvaluationModal(false)}
+      />
     </div>
   )
 }

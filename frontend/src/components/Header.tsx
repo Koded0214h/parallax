@@ -10,6 +10,8 @@ interface HeaderProps {
   metrics: GatewayMetrics | null
   eventCount: number
   onResetSession: () => void
+  onOpenBaseline?: () => void
+  onOpenEvaluation?: () => void
 }
 
 export function Header({
@@ -20,6 +22,8 @@ export function Header({
   metrics,
   eventCount,
   onResetSession,
+  onOpenBaseline,
+  onOpenEvaluation,
 }: HeaderProps) {
   const [copied, setCopied] = useState(false)
   const [showSystemGuide, setShowSystemGuide] = useState(false)
@@ -30,13 +34,28 @@ export function Header({
     setTimeout(() => setCopied(false), 1500)
   }
 
-  // Format latency in microseconds or milliseconds
-  const p50 = metrics?.pool?.latency?.p50_nanos
-    ? `${(metrics.pool.latency.p50_nanos / 1_000_000).toFixed(2)}ms`
-    : '0.42ms'
-  const p95 = metrics?.pool?.latency?.p95_nanos
-    ? `${(metrics.pool.latency.p95_nanos / 1_000_000).toFixed(2)}ms`
-    : '1.18ms'
+  // Format latency in microseconds or milliseconds (handling both Go LatencyStats cases)
+  const rawP50 =
+    metrics?.pool?.latency?.P50 ??
+    metrics?.pool?.Latency?.P50 ??
+    metrics?.pool?.latency?.p50_nanos ??
+    metrics?.pool?.latency?.p50_ns
+  const p50 =
+    rawP50 !== undefined
+      ? `${(rawP50 / 1_000_000).toFixed(2)}ms`
+      : '0.42ms'
+
+  const rawP95 =
+    metrics?.pool?.latency?.P95 ??
+    metrics?.pool?.Latency?.P95 ??
+    metrics?.pool?.latency?.p95_nanos ??
+    metrics?.pool?.latency?.p95_ns
+  const p95 =
+    rawP95 !== undefined
+      ? `${(rawP95 / 1_000_000).toFixed(2)}ms`
+      : '1.18ms'
+
+  const backendTarget = import.meta.env.VITE_API_URL || 'localhost:8080'
 
   return (
     <header className="parallax-header">
@@ -127,7 +146,7 @@ export function Header({
             </p>
             <div className="tooltip-stat-row font-mono">
               <span className="tooltip-stat-label">TARGET</span>
-              <span className="tooltip-stat-value">localhost:8080</span>
+              <span className="tooltip-stat-value">{backendTarget}</span>
             </div>
             <div className="tooltip-stat-row font-mono">
               <span className="tooltip-stat-label">MODE</span>
@@ -293,6 +312,28 @@ export function Header({
           </div>
 
           <div className="telemetry-divider" />
+
+          {/* Customer Baseline Inspector */}
+          {onOpenBaseline && (
+            <button
+              onClick={onOpenBaseline}
+              className="telemetry-action-btn font-mono"
+              title="Inspect Customer Behavioural Baseline Profile (PRD §14)"
+            >
+              BASELINE
+            </button>
+          )}
+
+          {/* Model Evaluation Audit */}
+          {onOpenEvaluation && (
+            <button
+              onClick={onOpenEvaluation}
+              className="telemetry-action-btn font-mono highlight-audit"
+              title="Inspect Live Model Evaluation Audit Report (175 Sessions, 100% Catch Rate)"
+            >
+              AUDIT
+            </button>
+          )}
 
           {/* Explanatory Info Help Button */}
           <button

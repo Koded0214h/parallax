@@ -160,38 +160,61 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
               </div>
             ) : (
               <div className="probe-interaction-area">
-                <div className="probe-quick-actions">
-                  <span className="quick-label font-mono">SIMULATE APP SCAM RESPONSE:</span>
-                  <button
-                    onClick={() => onAnswerProbe?.(defaultProbeReply)}
-                    className="quick-action-btn font-mono"
-                    title="Inject synthetic response: Bank fraud squad told me to transfer to safe account"
-                  >
-                    Inject "Bank instructed me to move funds to safe account"
-                  </button>
-                </div>
+                {intent?.probe?.options && intent.probe.options.length > 0 ? (
+                  <div className="probe-options-group">
+                    <span className="quick-label font-mono">SELECT CONTEXTUAL RESPONSE:</span>
+                    <div className="probe-options-grid">
+                      {intent.probe.options.map((opt) => (
+                        <button
+                          key={opt.id}
+                          onClick={() => onAnswerProbe?.(opt.text)}
+                          className={`probe-option-btn font-mono ${opt.category || ''}`}
+                          title={`Category: ${opt.category || 'general'}`}
+                        >
+                          <span className="opt-text">{opt.text}</span>
+                          {opt.category && (
+                            <span className="opt-category font-mono">{opt.category.toUpperCase()}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="probe-quick-actions">
+                    <span className="quick-label font-mono">SIMULATE APP SCAM RESPONSE:</span>
+                    <button
+                      onClick={() => onAnswerProbe?.(defaultProbeReply)}
+                      className="quick-action-btn font-mono"
+                      title="Inject synthetic response: Bank fraud squad told me to transfer to safe account"
+                    >
+                      Inject "Bank instructed me to move funds to safe account"
+                    </button>
+                  </div>
+                )}
 
-                <div className="probe-custom-input">
-                  <input
-                    type="text"
-                    value={customReply}
-                    onChange={(e) => setCustomReply(e.target.value)}
-                    placeholder="Or type custom customer statement..."
-                    className="custom-probe-field font-mono"
-                  />
-                  <button
-                    onClick={() => {
-                      if (customReply.trim()) {
-                        onAnswerProbe?.(customReply.trim())
-                        setCustomReply('')
-                      }
-                    }}
-                    disabled={!customReply.trim()}
-                    className="submit-probe-btn font-mono"
-                  >
-                    SUBMIT
-                  </button>
-                </div>
+                {intent?.probe?.allow_freeform !== false && (
+                  <div className="probe-custom-input">
+                    <input
+                      type="text"
+                      value={customReply}
+                      onChange={(e) => setCustomReply(e.target.value)}
+                      placeholder="Or type custom customer statement..."
+                      className="custom-probe-field font-mono"
+                    />
+                    <button
+                      onClick={() => {
+                        if (customReply.trim()) {
+                          onAnswerProbe?.(customReply.trim())
+                          setCustomReply('')
+                        }
+                      }}
+                      disabled={!customReply.trim()}
+                      className="submit-probe-btn font-mono"
+                    >
+                      SUBMIT
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

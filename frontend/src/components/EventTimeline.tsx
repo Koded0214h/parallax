@@ -7,7 +7,7 @@ interface EventTimelineProps {
   onClear?: () => void
 }
 
-function getEventPillClass(type: EventType): string {
+function getEventPillClass(type: EventType | string): string {
   switch (type) {
     case 'LOGIN':
     case 'LOGOUT':
@@ -156,7 +156,7 @@ export function EventTimeline({ events, onClear }: EventTimelineProps) {
   )
 }
 
-function getSummaryMetadata(_type: EventType, meta: Record<string, unknown>): string {
+function getSummaryMetadata(_type: EventType | string, meta: Record<string, unknown>): string {
   if (meta.amount_gbp !== undefined) {
     return `£${Number(meta.amount_gbp).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
   }

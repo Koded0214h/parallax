@@ -25,4 +25,4 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_URL
-        value: https://parallax-backend.onrender.com
+        value: https://parallax-n4it.onrender.com

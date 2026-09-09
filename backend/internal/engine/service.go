@@ -127,7 +127,7 @@ func (s *Service) EvaluateSession(sessionID string) (contracts.IntentResponse, e
 	seq := s.sequence.Analyze(trajectory, fs)
 
 	// Stage 3: Intent Hypotheses Inference
-	inf := s.intent.Infer(fs, seq, userBaseline)
+	inf := s.intent.Infer(trajectory, fs, seq, userBaseline)
 
 	// Stage 4: Uncertainty Evaluation
 	u := s.uncertainty.Evaluate(inf, fs)

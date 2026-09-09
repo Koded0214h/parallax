@@ -5,6 +5,7 @@ import (
 
 	"github.com/holiday-heartbreaks/parallax/backend/internal/baseline"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/features"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/ml"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/sequence"
 	"github.com/holiday-heartbreaks/parallax/backend/pkg/contracts"
 )
@@ -16,24 +17,32 @@ type InferenceResult struct {
 	DominantScore  float64            `json:"dominant_score"`
 	RiskScore      float64            `json:"risk_score"`
 	Evidence       []string           `json:"evidence"`
+	MLConfidence   float64            `json:"ml_confidence,omitempty"`
 }
 
-// Engine combines behavioural, sequence, and contextual evidence into calibrated intent hypotheses.
-type Engine struct{}
+// Engine combines behavioural, sequence, and machine-learning ensemble evidence into calibrated intent hypotheses.
+type Engine struct {
+	classifier *ml.Classifier
+}
 
 // NewEngine constructs a new Intent Engine.
 func NewEngine() *Engine {
-	return &Engine{}
+	return &Engine{
+		classifier: ml.NewClassifier(),
+	}
 }
 
-// Infer generates calibrated intent hypotheses from extracted features and sequence analysis.
-func (e *Engine) Infer(fs features.FeatureSet, seq sequence.SequenceResult, b baseline.UserBaseline) InferenceResult {
-	// Raw unnormalized logits
+// Infer generates calibrated intent hypotheses from extracted features, sequence analysis, and ML ensemble.
+func (e *Engine) Infer(trajectory []contracts.Event, fs features.FeatureSet, seq sequence.SequenceResult, b baseline.UserBaseline) InferenceResult {
+	// ML Ensemble Tree & Markov Likelihood evaluation
+	mlPred := e.classifier.Predict(trajectory, fs, seq, b)
+
+	// Combine ML margins with engineered rules
 	var (
-		scoreLegit   = 1.0
-		scoreAccid   = 0.2
-		scoreSocEng  = 0.2
-		scoreATO     = 0.2
+		scoreLegit  = mlPred.MarginScores[contracts.IntentLegitimate]
+		scoreAccid  = mlPred.MarginScores[contracts.IntentAccidental]
+		scoreSocEng = mlPred.MarginScores[contracts.IntentSocialEngineering]
+		scoreATO    = mlPred.MarginScores[contracts.IntentAccountTakeover]
 	)
 
 	evidence := features.GenerateEvidenceItems(fs)

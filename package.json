@@ -1,0 +1,10 @@
+{
+  "name": "parallax",
+  "private": true,
+  "description": "Real-time intent-inference layer for digital payments",
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "lint": "npm run lint --prefix frontend"
+  }
+}

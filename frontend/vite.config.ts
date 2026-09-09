@@ -9,8 +9,32 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/v1': 'http://localhost:8080',
-      '/healthz': 'http://localhost:8080',
+      '/v1': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            // Silently handle proxy errors when the Go backend is offline
+            if ('writeHead' in res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'Gateway offline' }))
+            }
+          })
+        },
+      },
+      '/healthz': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            // Silently handle proxy errors when the Go backend is offline
+            if ('writeHead' in res && !res.headersSent) {
+              res.writeHead(503, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ status: 'unreachable' }))
+            }
+          })
+        },
+      },
     },
   },
 })

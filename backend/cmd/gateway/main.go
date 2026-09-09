@@ -95,6 +95,13 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Self-ping worker: hits /health every 2 minutes so Render free instance never sleeps
+	selfPingURL := envOr("PARALLAX_SELF_PING_URL", "https://parallax-n4it.onrender.com/health")
+	if selfPingURL != "" && os.Getenv("PARALLAX_SELF_PING_DISABLED") != "true" {
+		go startSelfPing(ctx, logger, selfPingURL, 2*time.Minute)
+	}
+
 	<-ctx.Done()
 
 	logger.Info("shutting down")
@@ -120,3 +127,36 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
+
+// startSelfPing periodically sends a GET request to targetURL to keep the instance warm.
+func startSelfPing(ctx context.Context, logger *slog.Logger, targetURL string, interval time.Duration) {
+	logger.Info("starting self-ping heartbeat worker", "target", targetURL, "interval", interval)
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("self-ping heartbeat worker exiting")
+			return
+		case <-ticker.C:
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+			if err != nil {
+				logger.Warn("failed to construct self-ping request", "err", err)
+				continue
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				logger.Warn("self-ping heartbeat failed", "target", targetURL, "err", err)
+				continue
+			}
+			resp.Body.Close()
+			logger.Info("self-ping heartbeat succeeded", "target", targetURL, "status", resp.StatusCode)
+		}
+	}
+}
+

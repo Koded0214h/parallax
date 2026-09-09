@@ -2,6 +2,7 @@ package intent
 
 import (
 	"testing"
+	"time"
 
 	"github.com/holiday-heartbreaks/parallax/backend/internal/baseline"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/features"
@@ -23,8 +24,13 @@ func TestInferLegitimate(t *testing.T) {
 		MatchedPattern:    sequence.PatternLegitimateFlow,
 		LegitPatternScore: 0.9,
 	}
+	now := time.Now().UTC()
+	trajectory := []contracts.Event{
+		{Type: contracts.EventLogin, Timestamp: now.Unix()},
+		{Type: contracts.EventAmountEntered, Timestamp: now.Add(5 * time.Second).Unix()},
+	}
 
-	res := eng.Infer(fs, seq, b)
+	res := eng.Infer(trajectory, fs, seq, b)
 	if res.DominantIntent != contracts.IntentLegitimate {
 		t.Fatalf("expected dominant intent legitimate, got %s", res.DominantIntent)
 	}
@@ -36,6 +42,7 @@ func TestInferLegitimate(t *testing.T) {
 func TestInferAccountTakeover(t *testing.T) {
 	eng := NewEngine()
 	b := baseline.DefaultBaseline("user_001")
+	now := time.Now().UTC()
 
 	fs := features.FeatureSet{
 		DeviceKnown:            false,
@@ -51,7 +58,14 @@ func TestInferAccountTakeover(t *testing.T) {
 		ATOPatternScore: 0.95,
 	}
 
-	res := eng.Infer(fs, seq, b)
+	trajectory := []contracts.Event{
+		{Type: contracts.EventDeviceChanged, Timestamp: now.Unix()},
+		{Type: contracts.EventPasswordChanged, Timestamp: now.Add(2 * time.Second).Unix()},
+		{Type: contracts.EventBeneficiaryCreated, Timestamp: now.Add(4 * time.Second).Unix()},
+		{Type: contracts.EventAmountEntered, Timestamp: now.Add(6 * time.Second).Unix()},
+	}
+
+	res := eng.Infer(trajectory, fs, seq, b)
 	if res.DominantIntent != contracts.IntentAccountTakeover {
 		t.Fatalf("expected dominant intent account_takeover, got %s", res.DominantIntent)
 	}
@@ -66,6 +80,7 @@ func TestInferAccountTakeover(t *testing.T) {
 func TestInferSocialEngineeringWithProbe(t *testing.T) {
 	eng := NewEngine()
 	b := baseline.DefaultBaseline("user_001")
+	now := time.Now().UTC()
 
 	// Prior to probe:
 	fsBefore := features.FeatureSet{
@@ -79,7 +94,12 @@ func TestInferSocialEngineeringWithProbe(t *testing.T) {
 		MatchedPattern:     sequence.PatternSocialEngineering,
 		SocEngPatternScore: 0.75,
 	}
-	resBefore := eng.Infer(fsBefore, seqBefore, b)
+	trajBefore := []contracts.Event{
+		{Type: contracts.EventLogin, Timestamp: now.Unix()},
+		{Type: contracts.EventBeneficiaryCreated, Timestamp: now.Add(5 * time.Second).Unix()},
+		{Type: contracts.EventAmountEntered, Timestamp: now.Add(10 * time.Second).Unix()},
+	}
+	resBefore := eng.Infer(trajBefore, fsBefore, seqBefore, b)
 
 	// After probe response indicating impersonation:
 	fsAfter := fsBefore
@@ -89,7 +109,11 @@ func TestInferSocialEngineeringWithProbe(t *testing.T) {
 		MatchedPattern:     sequence.PatternSocialEngineering,
 		SocEngPatternScore: 0.95,
 	}
-	resAfter := eng.Infer(fsAfter, seqAfter, b)
+	trajAfter := append(trajBefore, contracts.Event{
+		Type:      contracts.EventIntentProbeResponse,
+		Timestamp: now.Add(20 * time.Second).Unix(),
+	})
+	resAfter := eng.Infer(trajAfter, fsAfter, seqAfter, b)
 
 	if resAfter.Hypotheses[contracts.IntentSocialEngineering] <= resBefore.Hypotheses[contracts.IntentSocialEngineering] {
 		t.Fatalf("expected social engineering probability to increase after probe response")

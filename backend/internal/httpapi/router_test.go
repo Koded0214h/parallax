@@ -207,3 +207,145 @@ func TestNewRouterDefaultsAreUsable(t *testing.T) {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
 }
+
+func TestHealthEndpoint(t *testing.T) {
+	srv, _ := testServer(t)
+	res, err := http.Get(srv.URL + "/health")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	body := decode[map[string]any](t, res)
+	if body["status"] != "ok" {
+		t.Errorf("expected status 'ok', got %v", body["status"])
+	}
+	if _, ok := body["uptime_seconds"]; !ok {
+		t.Errorf("expected uptime_seconds in health body")
+	}
+}
+
+func TestScenariosEndpoints(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Test GET /v1/scenarios
+	res, err := http.Get(srv.URL + "/v1/scenarios")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	catalog := decode[map[string]any](t, res)
+	scenariosList := catalog["scenarios"].([]any)
+	if len(scenariosList) < 5 {
+		t.Errorf("expected at least 5 scenarios in catalog, got %d", len(scenariosList))
+	}
+
+	// Test POST /v1/scenarios/legitimate/run
+	runRes, err := http.Post(srv.URL+"/v1/scenarios/legitimate/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runRes.Body.Close()
+
+	if runRes.StatusCode != http.StatusOK {
+		t.Fatalf("run status = %d, want 200", runRes.StatusCode)
+	}
+	runBody := decode[map[string]any](t, runRes)
+	if runBody["scenario"] != "legitimate" {
+		t.Errorf("expected scenario legitimate, got %v", runBody["scenario"])
+	}
+	intentObj, ok := runBody["intent"].(map[string]any)
+	if !ok || intentObj["action"] != "ALLOW" {
+		t.Errorf("expected ALLOW action for legitimate scenario, got %+v", intentObj)
+	}
+
+	// Test POST /v1/scenarios/account_takeover/run
+	atoRes, err := http.Post(srv.URL+"/v1/scenarios/account_takeover/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer atoRes.Body.Close()
+	if atoRes.StatusCode != http.StatusOK {
+		t.Fatalf("ato run status = %d, want 200", atoRes.StatusCode)
+	}
+	atoBody := decode[map[string]any](t, atoRes)
+	atoIntent := atoBody["intent"].(map[string]any)
+	if atoIntent["action"] != "BLOCK" {
+		t.Errorf("expected BLOCK action for ATO scenario, got %+v", atoIntent)
+	}
+}
+
+func TestProbeSubmissionEndpoint(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// Run social engineering scenario first to trigger PROBE
+	runRes, err := http.Post(srv.URL+"/v1/scenarios/social_engineering/run", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer runRes.Body.Close()
+
+	runBody := decode[map[string]any](t, runRes)
+	sessID := runBody["session_id"].(string)
+
+	// Submit probe response
+	probeReq := `{"session_id":"` + sessID + `","response":"The bank security officer told me to reverse my account"}`
+	probeRes, err := http.Post(srv.URL+"/v1/probes/respond", "application/json", strings.NewReader(probeReq))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probeRes.Body.Close()
+
+	if probeRes.StatusCode != http.StatusOK {
+		t.Fatalf("probe submit status = %d, want 200", probeRes.StatusCode)
+	}
+	resp := decode[contracts.IntentResponse](t, probeRes)
+	if resp.Action != contracts.ActionBlock {
+		t.Errorf("expected BLOCK after probe response confirms bank impersonation, got %s", resp.Action)
+	}
+	if resp.DominantIntent != contracts.IntentSocialEngineering {
+		t.Errorf("expected social_engineering dominant, got %s", resp.DominantIntent)
+	}
+}
+
+func TestBaselinesAndResetEndpoints(t *testing.T) {
+	srv, _ := testServer(t)
+
+	// GET /v1/baselines/user_001
+	res, err := http.Get(srv.URL + "/v1/baselines/user_001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("baseline status = %d, want 200", res.StatusCode)
+	}
+	base := decode[map[string]any](t, res)
+	if base["user_id"] != "user_001" {
+		t.Errorf("expected user_001 baseline, got %v", base["user_id"])
+	}
+
+	// POST /v1/reset
+	resetRes, err := http.Post(srv.URL+"/v1/reset", "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resetRes.Body.Close()
+
+	if resetRes.StatusCode != http.StatusOK {
+		t.Fatalf("reset status = %d, want 200", resetRes.StatusCode)
+	}
+	resetBody := decode[map[string]string](t, resetRes)
+	if resetBody["status"] != "ok" {
+		t.Errorf("expected ok status, got %v", resetBody["status"])
+	}
+}
+

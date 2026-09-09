@@ -1,10 +1,4 @@
-// Package httpapi wires the Parallax HTTP surface (prd.md §21.1, §21.10).
-//
-// Ingest path: POST /v1/events -> ingest.Normalizer -> session.Store -> (if a
-// Bus is configured) stream.Bus. Observability: GET /v1/stream is a
-// Server-Sent Events feed of the live event stream; GET /v1/metrics exposes
-// bus and worker-pool counters. Intent inference is still a placeholder — the
-// intelligence engine plugs into GET .../intent later.
+// Package httpapi wires the Parallax HTTP surface (prd.md §21.1, §21.10, §33).
 package httpapi
 
 import (
@@ -15,22 +9,33 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/holiday-heartbreaks/parallax/backend/evaluation"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/baseline"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/engine"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/ingest"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/scenarios"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/session"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/storage"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/stream"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/wal"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/worker"
 	"github.com/holiday-heartbreaks/parallax/backend/pkg/contracts"
+	"github.com/holiday-heartbreaks/parallax/backend/simulator"
 )
 
 // Deps are the collaborators a Router needs. NewRouter fills nil fields with
-// production defaults. Bus and Pool are optional: without a Bus, events are
-// still ingested and stored but not published, and /v1/stream is not served.
+// production defaults.
 type Deps struct {
 	Logger     *slog.Logger
 	Normalizer *ingest.Normalizer
 	Sessions   *session.Store
+	Baselines  *baseline.Store
 	Bus        *stream.Bus
 	Pool       *worker.Pool
+	Engine     *engine.Service
+	Storage    storage.Storage
+	WAL        *wal.WAL
+	StartTime  time.Time
 }
 
 func (d *Deps) withDefaults() {
@@ -42,6 +47,20 @@ func (d *Deps) withDefaults() {
 	}
 	if d.Sessions == nil {
 		d.Sessions = session.New()
+	}
+	if d.Baselines == nil {
+		d.Baselines = baseline.NewStore()
+	}
+	if d.Engine == nil {
+		d.Engine = engine.NewService(engine.Options{
+			Logger:    d.Logger,
+			Sessions:  d.Sessions,
+			Baselines: d.Baselines,
+			Bus:       d.Bus,
+		})
+	}
+	if d.StartTime.IsZero() {
+		d.StartTime = time.Now()
 	}
 }
 
@@ -55,6 +74,11 @@ func NewRouterWithDeps(d Deps) http.Handler {
 	d.withDefaults()
 	mux := http.NewServeMux()
 
+	// Health and cron ping endpoints
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, d.snapshot("ok"))
+	})
+
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, d.snapshot("ok"))
 	})
@@ -63,6 +87,7 @@ func NewRouterWithDeps(d Deps) http.Handler {
 		writeJSON(w, http.StatusOK, d.snapshot(""))
 	})
 
+	// Ingestion endpoint
 	mux.HandleFunc("POST /v1/events", func(w http.ResponseWriter, r *http.Request) {
 		var raw contracts.Event
 		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
@@ -82,6 +107,9 @@ func NewRouterWithDeps(d Deps) http.Handler {
 		}
 
 		stored, count := d.Sessions.Append(e)
+		if d.WAL != nil {
+			_ = d.WAL.Write(r.Context(), stored)
+		}
 		if d.Bus != nil {
 			d.Bus.Publish(stored) // bounded intake => backpressure to the caller
 		}
@@ -95,6 +123,7 @@ func NewRouterWithDeps(d Deps) http.Handler {
 		})
 	})
 
+	// Decision & Intent Inference endpoint
 	mux.HandleFunc("GET /v1/sessions/{id}/intent", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		n := d.Sessions.Len(id)
@@ -102,7 +131,22 @@ func NewRouterWithDeps(d Deps) http.Handler {
 			writeErr(w, http.StatusNotFound, "unknown session")
 			return
 		}
-		// Placeholder inference. Replaced by the real intent engine (fluxx).
+
+		if d.Engine != nil {
+			resp, ok := d.Engine.GetIntent(id)
+			if !ok {
+				var err error
+				resp, err = d.Engine.EvaluateSession(id)
+				if err != nil {
+					writeErr(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+			}
+			writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
+		// Fallback placeholder if no engine configured
 		writeJSON(w, http.StatusOK, contracts.IntentResponse{
 			SessionID: id,
 			Hypotheses: map[string]float64{
@@ -113,9 +157,119 @@ func NewRouterWithDeps(d Deps) http.Handler {
 			},
 			Uncertainty: 1.0,
 			Action:      contracts.ActionProbe,
-			Evidence:    []string{"inference_engine_not_wired_yet"},
+			Evidence:    []string{"engine_not_configured"},
 			EventsSeen:  n,
 		})
+	})
+
+	// Intent Probe response endpoints (prd.md §15)
+	probeHandler := func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			SessionID string `json:"session_id"`
+			Response  string `json:"response"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeErr(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+
+		sessID := r.PathValue("id")
+		if sessID == "" {
+			sessID = req.SessionID
+		}
+		if sessID == "" || req.Response == "" {
+			writeErr(w, http.StatusBadRequest, "session_id and response are required")
+			return
+		}
+
+		if d.Engine == nil {
+			writeErr(w, http.StatusInternalServerError, "engine not configured")
+			return
+		}
+
+		updatedIntent, err := d.Engine.SubmitProbeResponse(sessID, req.Response)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, updatedIntent)
+	}
+
+	mux.HandleFunc("POST /v1/probes/respond", probeHandler)
+	mux.HandleFunc("POST /v1/sessions/{id}/probe", probeHandler)
+
+	// Scenarios catalogue & runner endpoints (prd.md §23, §24, §35)
+	mux.HandleFunc("GET /v1/scenarios", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"scenarios": scenarios.List(),
+		})
+	})
+
+	mux.HandleFunc("POST /v1/scenarios/{id}/run", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		sessID, events, err := scenarios.BuildEvents(id)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		for _, raw := range events {
+			norm, normErr := d.Normalizer.Normalize(raw)
+			if normErr != nil {
+				continue
+			}
+			stored, _ := d.Sessions.Append(norm)
+			if d.WAL != nil {
+				_ = d.WAL.Write(r.Context(), stored)
+			}
+			if d.Bus != nil {
+				d.Bus.Publish(stored)
+			}
+		}
+
+		// Ensure evaluated before returning response
+		resp, evalErr := d.Engine.EvaluateSession(sessID)
+		if evalErr != nil {
+			writeErr(w, http.StatusInternalServerError, evalErr.Error())
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"scenario":        id,
+			"session_id":      sessID,
+			"events_ingested": len(events),
+			"intent":          resp,
+		})
+	})
+
+	// User baseline inspection endpoint
+	mux.HandleFunc("GET /v1/baselines/{id}", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		b := d.Baselines.GetOrCreate(id)
+		writeJSON(w, http.StatusOK, b)
+	})
+
+	// Demo state reset endpoint
+	mux.HandleFunc("POST /v1/reset", func(w http.ResponseWriter, _ *http.Request) {
+		d.Sessions.Reset()
+		d.Baselines.Reset()
+		if d.Engine != nil {
+			d.Engine.Reset()
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":  "ok",
+			"message": "Demo state reset successfully",
+		})
+	})
+
+	// Synthetic dataset evaluation report endpoint
+	mux.HandleFunc("GET /v1/evaluation", func(w http.ResponseWriter, _ *http.Request) {
+		gen := simulator.NewGenerator(42)
+		dataset := gen.GenerateDataset(100, 25, 25, 25)
+		ev := evaluation.NewEvaluator()
+		summary := ev.Evaluate(dataset)
+		writeJSON(w, http.StatusOK, summary)
 	})
 
 	if d.Bus != nil {
@@ -169,26 +323,31 @@ func (d Deps) handleStream(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			// Unnamed event so the browser's EventSource.onmessage receives it;
-			// the type is in the payload.
 			fmt.Fprintf(w, "data: %s\n\n", payload)
 			flusher.Flush()
 		}
 	}
 }
 
-// snapshot builds the /healthz and /v1/metrics body. status is included when
-// non-empty.
+// snapshot builds the health and metrics payload.
 func (d Deps) snapshot(status string) map[string]any {
-	m := map[string]any{"sessions": d.Sessions.Count()}
+	m := map[string]any{
+		"sessions": d.Sessions.Count(),
+	}
 	if status != "" {
 		m["status"] = status
+	}
+	if !d.StartTime.IsZero() {
+		m["uptime_seconds"] = int64(time.Since(d.StartTime).Seconds())
 	}
 	if d.Bus != nil {
 		m["bus"] = d.Bus.Stats()
 	}
 	if d.Pool != nil {
 		m["pool"] = d.Pool.Stats()
+	}
+	if d.WAL != nil {
+		m["wal"] = d.WAL.Status()
 	}
 	return m
 }
@@ -203,12 +362,12 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// withCORS allows the Vite dev server to call the gateway during development.
+// withCORS allows the frontend dev server and external clients to call the gateway.
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

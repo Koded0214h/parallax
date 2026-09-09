@@ -19,17 +19,37 @@ const (
 	IntentAccountTakeover   = "account_takeover"
 )
 
+// ProbeOption is an option in a contextual probe presented to the user.
+type ProbeOption struct {
+	ID       string `json:"id"`
+	Text     string `json:"text"`
+	Category string `json:"category,omitempty"`
+}
+
+// ProbePayload represents an active or completed intent probe.
+type ProbePayload struct {
+	ProbeID       string        `json:"probe_id"`
+	Prompt        string        `json:"prompt"`
+	Options       []ProbeOption `json:"options"`
+	AllowFreeform bool          `json:"allow_freeform"`
+	Completed     bool          `json:"completed"`
+	Response      string        `json:"response,omitempty"`
+}
+
 // IntentResponse is the current inference for a session, returned by
 // GET /v1/sessions/{id}/intent (prd.md §33).
 //
-// This is the contract between the intelligence engine and the frontend. The
-// runtime layer only transports it.
+// This is the contract between the intelligence engine and the frontend.
 type IntentResponse struct {
-	SessionID   string             `json:"session_id"`
-	Hypotheses  map[string]float64 `json:"hypotheses"`
-	Uncertainty float64            `json:"uncertainty"`
-	Action      Action             `json:"action"`
-	Evidence    []string           `json:"evidence"`
-	// EventsSeen is how many events the inference is based on. Runtime-owned.
-	EventsSeen int `json:"events_seen"`
+	SessionID      string             `json:"session_id"`
+	Hypotheses     map[string]float64 `json:"hypotheses"`
+	Uncertainty    float64            `json:"uncertainty"`
+	Action         Action             `json:"action"`
+	Evidence       []string           `json:"evidence"`
+	EventsSeen     int                `json:"events_seen"`
+	Explanation    string             `json:"explanation,omitempty"`
+	Confidence     string             `json:"confidence,omitempty"`
+	RiskScore      float64            `json:"risk_score,omitempty"`
+	DominantIntent string             `json:"dominant_intent,omitempty"`
+	Probe          *ProbePayload      `json:"probe,omitempty"`
 }

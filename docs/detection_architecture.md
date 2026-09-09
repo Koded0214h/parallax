@@ -39,44 +39,48 @@ Factual Explanation Layer
 
 ### 2.1 The Latent Intent Space
 
-We model intent $I$ as a categorical latent variable over four mutually exclusive hypotheses:
+We model intent `I` as a categorical latent variable over four mutually exclusive hypotheses:
 
-$$I \in \{ \text{Legitimate } (L), \text{Accidental } (A), \text{Social Engineering } (SE), \text{Account Takeover } (ATO) \}$$
+```text
+I ∈ { Legitimate (L), Accidental (A), Social Engineering (SE), Account Takeover (ATO) }
+```
 
 The engine computes a calibrated posterior probability distribution:
 
-$$P(I \mid \mathcal{E}, \mathcal{B}, \mathcal{S})$$
+```text
+P(I | E, B, S)
+```
 
 where:
-- $\mathcal{E}$ is the structured feature vector extracted from the session trajectory.
-- $\mathcal{B}$ is the customer's historical behavioural baseline.
-- $\mathcal{S}$ is the ordered event sequence.
+- `E` is the structured feature vector extracted from the session trajectory.
+- `B` is the customer's historical behavioural baseline.
+- `S` is the ordered event sequence.
 
 ### 2.2 Feature Transformation Vector
 
-At any event $t$ within session trajectory $T = (e_1, e_2, \dots, e_n)$, the feature extractor constructs a normalized 21-dimensional vector $\mathbf{x} \in \mathbb{R}^{21}$:
+At any event `t` within session trajectory `T = (e_1, e_2, ..., e_n)`, the feature extractor constructs a normalized 21-dimensional vector `x ∈ R^21`:
 
-1. **Amount Deviation Ratio**: $\frac{\text{amount}}{\mu_{\text{baseline}}}$
-2. **Amount Z-Score**: $\frac{\text{amount} - \mu_{\text{baseline}}}{\sigma_{\text{baseline}}}$
-3. **Zero-Padding Anomaly Flag**: Indicator that amount is approximately $10\times$ normal to a habitual recipient.
-4. **Beneficiary Novelty**: $\mathbb{I}(\text{beneficiary} \notin \text{KnownBeneficiaries})$
-5. **Beneficiary Log-Age**: $\ln(1 + \Delta t_{\text{beneficiary\_creation}})$
-6. **Habitual Payee Indicator**: $\mathbb{I}(\text{beneficiary} \in \text{KnownBeneficiaries})$
-7. **Device Trust Indicator**: $\mathbb{I}(\text{device\_id} \in \text{KnownDevices})$
-8. **Recent Device Mutation**: Indicator of device switch within the current session.
-9. **Recent Credential Mutation**: Indicator of password/PIN change within the current session.
-10. **Credential Change Log-Age**: $\ln(1 + \Delta t_{\text{credential\_change}})$
-11. **High-Velocity Sequence Indicator**: Critical security changes completed in under 60 seconds.
-12. **Temporal Deviation**: $\mathbb{I}(\text{hour} \notin [\text{StartHour}, \text{EndHour}])$
-13. **Interaction Speed Ratio**: $\frac{\text{events/sec}}{\text{baseline events/sec}}$
-14. **Session Duration Log-Time**: $\ln(1 + \text{duration}_{\text{seconds}})$
+1. **Amount Deviation Ratio**: `amount / baseline_mean`
+2. **Amount Z-Score**: `(amount - baseline_mean) / baseline_std_dev`
+3. **Zero-Padding Anomaly Flag**: Indicator (1.0 or 0.0) that amount is approximately 10x normal to a habitual recipient.
+4. **Beneficiary Novelty**: Indicator (1.0 or 0.0) that beneficiary is not in `KnownBeneficiaries`.
+5. **Beneficiary Log-Age**: `ln(1 + Δt_beneficiary_creation)`
+6. **Habitual Payee Indicator**: Indicator (1.0 or 0.0) that beneficiary is in `KnownBeneficiaries`.
+7. **Device Trust Indicator**: Indicator (1.0 or 0.0) that `device_id` is in `KnownDevices`.
+8. **Recent Device Mutation**: Indicator (1.0 or 0.0) of device switch within the current session.
+9. **Recent Credential Mutation**: Indicator (1.0 or 0.0) of password/PIN change within the current session.
+10. **Credential Change Log-Age**: `ln(1 + Δt_credential_change)`
+11. **High-Velocity Sequence Indicator**: Indicator (1.0 or 0.0) of critical security changes completed in under 60 seconds.
+12. **Temporal Deviation**: Indicator (1.0 or 0.0) of transaction hour falling outside `[StartHour, EndHour]`.
+13. **Interaction Speed Ratio**: `(events / sec) / (baseline events / sec)`
+14. **Session Duration Log-Time**: `ln(1 + duration_seconds)`
 15. **Event Count**: Total observed events in trajectory.
-16. **Failed Attempts Count**: Failed OTPs or authorizations.
-17. **OTP Verification State**: Indicator of completed secondary factor.
-18. **Probe Responded Flag**: Indicator of whether context probe was answered.
-19. **Probe Impersonation Signal**: Keyword-derived marker indicating bank/authority impersonation.
+16. **Failed Attempts Count**: Failed OTPs or authorizations count.
+17. **OTP Verification State**: Indicator (1.0 or 0.0) of completed secondary factor verification.
+18. **Probe Responded Flag**: Indicator (1.0 or 0.0) of whether context probe was answered.
+19. **Probe Impersonation Signal**: Keyword-derived marker indicating bank or authority impersonation.
 20. **Probe Urgency Signal**: Keyword-derived marker indicating coercion or artificial urgency.
-21. **Markov Sequence Anomaly Score**: Normalized negative log-likelihood of observed state transitions.
+21. **Markov Sequence Anomaly Score**: Normalized negative log-likelihood of observed state transitions in range `[0.0, 1.0]`.
 
 ---
 
@@ -86,32 +90,38 @@ At any event $t$ within session trajectory $T = (e_1, e_2, \dots, e_n)$, the fea
 
 Rather than calling external Python runtimes (e.g., PyTorch, XGBoost via CGo) which introduce multi-millisecond process marshalling and runtime dependencies, Parallax implements a **production-grade tree ensemble directly in Go**.
 
-Each class $k \in \{L, A, SE, ATO\}$ maintains an ensemble of $M$ decision trees:
+Each class `k ∈ {L, A, SE, ATO}` maintains an ensemble of `M` decision trees:
 
-$$F_k(\mathbf{x}) = f_{k,0} + \sum_{m=1}^{M} \gamma_{k,m} T_{k,m}(\mathbf{x})$$
+```text
+F_k(x) = f_{k,0} + Σ_{m=1..M} ( γ_{k,m} * T_{k,m}(x) )
+```
 
 where:
-- $f_{k,0}$ is the class base score.
-- $T_{k,m}(\mathbf{x})$ is the leaf prediction of tree $m$.
-- $\gamma_{k,m}$ is the learning contraction weight.
+- `f_{k,0}` is the class base score.
+- `T_{k,m}(x)` is the leaf prediction of tree `m`.
+- `γ_{k,m}` is the learning contraction weight.
 
-The raw margins $F_k(\mathbf{x})$ are converted to well-behaved, calibrated probabilities using Softmax normalization:
+The raw margins `F_k(x)` are converted to well-behaved, calibrated probabilities using Softmax normalization:
 
-$$P(I = k \mid \mathbf{x}) = \frac{\exp(F_k(\mathbf{x}))}{\sum_{j} \exp(F_j(\mathbf{x}))}$$
+```text
+P(I = k | x) = exp(F_k(x)) / Σ_j exp(F_j(x))
+```
 
 **Latency Advantage**: In-process tree traversal executes in **3.5 microseconds** per evaluation, permitting more than 250,000 evaluations per second per CPU core without GC pressure.
 
 ### 3.2 Markov Transition Sequence Model
 
-A session is represented as an ordered sequence of event types $e_1 \to e_2 \to \dots \to e_n$. Legitimate sessions exhibit predictable operational cadences (e.g., `LOGIN -> AMOUNT_ENTERED -> OTP_REQUESTED -> OTP_VERIFIED -> TRANSFER_COMPLETED`).
+A session is represented as an ordered sequence of event types `e_1 -> e_2 -> ... -> e_n`. Legitimate sessions exhibit predictable operational cadences (e.g., `LOGIN -> AMOUNT_ENTERED -> OTP_REQUESTED -> OTP_VERIFIED -> TRANSFER_COMPLETED`).
 
 In contrast, an Account Takeover exhibits anomalous state transitions (e.g., `DEVICE_CHANGED -> PASSWORD_CHANGED -> BENEFICIARY_CREATED`).
 
-We maintain an empirical transition matrix $M(a, b) = P(e_{t} = b \mid e_{t-1} = a)$. The sequence anomaly score is computed as the normalized negative log-likelihood (NLL):
+We maintain an empirical transition matrix `M(a, b) = P(e_t = b | e_{t-1} = a)`. The sequence anomaly score is computed as the normalized negative log-likelihood (NLL):
 
-$$\text{NLL}(T) = \frac{1}{n-1} \sum_{i=1}^{n-1} -\ln \left( \max(M(e_i, e_{i+1}), \epsilon) \right)$$
+```text
+NLL(T) = (1 / (n - 1)) * Σ_{i=1..n-1} [ -ln( max( M(e_i, e_{i+1}), ε ) ) ]
+```
 
-The NLL is transformed via sigmoid scaling into an anomaly score $S_{\text{markov}} \in [0.0, 1.0]$.
+The NLL is transformed via sigmoid scaling into an anomaly score `S_markov ∈ [0.0, 1.0]`.
 
 ### 3.3 Dynamic Contextual Probing (Bayesian Intent Updating)
 
@@ -124,13 +134,14 @@ Observed Evidence -> High Uncertainty -> Intent Probe -> User Response -> Poster
 ```
 
 When the user responds with context (e.g., *"The bank security team told me to reverse funds"*), the evidence vector incorporates:
-- $\text{ProbeResponded} = 1.0$
-- $\text{ProbeImpersonationSignal} = 1.0$
+- `ProbeResponded = 1.0`
+- `ProbeImpersonationSignal = 1.0`
 
 This causes an immediate probability shift:
-- $P(\text{SocialEngineering})$ rises from $\approx 50\%$ to $\ge 90\%$.
-- Uncertainty collapses from $\approx 0.50$ to $\le 0.15$.
+- `P(SocialEngineering)` rises from ~50% to >= 90%.
+- Uncertainty collapses from ~0.50 to <= 0.15.
 - Proportional policy action transitions from `PROBE` to `BLOCK`.
+
 
 ---
 
@@ -170,14 +181,15 @@ The evaluation suite (`backend/evaluation/evaluator.go`) was executed across rea
 
 | Metric | Measured Value | Production Target | Status |
 |---|---|---|---|
-| **Overall Classification Accuracy** | **100.00%** | $\ge 95.0\%$ | Passed |
-| **Legitimate False Positive Rate (FPR)** | **0.00%** | $\le 1.0\%$ | Passed |
-| **Account Takeover Catch Rate (Recall)** | **100.00%** | $\ge 95.0\%$ | Passed |
-| **Account Takeover Precision** | **100.00%** | $\ge 90.0\%$ | Passed |
-| **Social Engineering Catch Rate (Recall)** | **100.00%** | $\ge 90.0\%$ | Passed |
-| **Accidental Anomaly Precision** | **100.00%** | $\ge 85.0\%$ | Passed |
-| **Inference Latency (per decision)** | **3.52 microseconds** | $\le 50$ milliseconds | Passed (14,000x faster) |
-| **End-to-End Pipeline Latency (p95)** | **11.2 milliseconds** | $\le 150$ milliseconds | Passed |
+| **Overall Classification Accuracy** | **100.00%** | >= 95.0% | Passed |
+| **Legitimate False Positive Rate (FPR)** | **0.00%** | <= 1.0% | Passed |
+| **Account Takeover Catch Rate (Recall)** | **100.00%** | >= 95.0% | Passed |
+| **Account Takeover Precision** | **100.00%** | >= 90.0% | Passed |
+| **Social Engineering Catch Rate (Recall)** | **100.00%** | >= 90.0% | Passed |
+| **Accidental Anomaly Precision** | **100.00%** | >= 85.0% | Passed |
+| **Inference Latency (per decision)** | **3.52 microseconds** | <= 50 milliseconds | Passed (14,000x faster) |
+| **End-to-End Pipeline Latency (p95)** | **11.2 milliseconds** | <= 150 milliseconds | Passed |
+
 
 ### 5.2 Confusion Matrix (350 Audited Sessions)
 

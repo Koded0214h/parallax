@@ -4,16 +4,23 @@ This document is the engineering reference for the frontend developer (Fiope) to
 
 ---
 
-## 1. Gateway Connection & Dev Setup
+## 1. Gateway Connection & Deployment Details
 
-### 1.1 Local Development
+### 1.1 Live Production Backend (Already Deployed)
+- **Base URL**: `https://parallax-n4it.onrender.com`
+- **Deployment Status**: Live, fully operational, and verified.
+- **CORS Support**: Configured with `Access-Control-Allow-Origin: *`, allowing cross-origin calls directly from localhost or any hosted frontend domain.
+- **Built-in Self-Ping Heartbeat**: An internal background worker runs every 2 minutes (`interval = 2 * time.Minute`) sending `GET https://parallax-n4it.onrender.com/health`. This guarantees the Render container stays continuously awake and responsive with zero cold-start delay.
+- **Frontend Action for Fiope**: The backend is completely done and running in production. Fiope only needs to deploy the frontend application (e.g., via Vercel, Netlify, or Render Static Site) with the environment variable:
+  ```env
+  VITE_API_URL=https://parallax-n4it.onrender.com
+  ```
+
+### 1.2 Local Development
 - **Backend Gateway**: Runs on `http://localhost:8080` by default (configurable via `PARALLAX_ADDR`).
 - **Frontend Dev Server**: Runs on `http://localhost:5173` via Vite.
 - **Proxy Configuration**: Dev requests to `/v1/*`, `/health`, and `/healthz` are automatically forwarded to `:8080` through `vite.config.ts`. The frontend can invoke relative paths directly (e.g., `fetch('/v1/events')`).
 
-### 1.2 Production / Render Deployment
-- When deployed to Render, the backend serves all routes including `/health`.
-- Render background ping / uptime cron jobs should target `GET /health` every 5 to 10 minutes to prevent container idling.
 
 ---
 
@@ -486,3 +493,57 @@ export interface ScenarioRunResult {
    - Display buttons for Scenarios A, B, C, D, and E.
    - Clicking a button calls `POST /v1/scenarios/:id/run` and populates the dashboard in real-time.
    - A `Reset` button triggers `POST /v1/reset` to restore a clean slate.
+
+---
+
+## 5. Live Production Verification & cURL Reference
+
+All routes have been verified against the live Render deployment (`https://parallax-n4it.onrender.com`):
+
+### 5.1 Health & Metrics
+```bash
+curl -s https://parallax-n4it.onrender.com/health
+curl -s https://parallax-n4it.onrender.com/healthz
+curl -s https://parallax-n4it.onrender.com/v1/metrics
+```
+
+### 5.2 List & Execute Demo Scenarios
+```bash
+# List all 5 scenarios
+curl -s https://parallax-n4it.onrender.com/v1/scenarios
+
+# Run Legitimate scenario
+curl -s -X POST https://parallax-n4it.onrender.com/v1/scenarios/legitimate/run
+
+# Run Account Takeover scenario
+curl -s -X POST https://parallax-n4it.onrender.com/v1/scenarios/account_takeover/run
+
+# Run Social Engineering scenario
+curl -s -X POST https://parallax-n4it.onrender.com/v1/scenarios/social_engineering/run
+
+# Run Accidental scenario
+curl -s -X POST https://parallax-n4it.onrender.com/v1/scenarios/accidental/run
+```
+
+### 5.3 Submit Intent Probe Response
+```bash
+curl -s -X POST https://parallax-n4it.onrender.com/v1/probes/respond \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"sess_demo_001","response":"Bank officer told me to move money"}'
+```
+
+### 5.4 Inspect Customer Baseline
+```bash
+curl -s https://parallax-n4it.onrender.com/v1/baselines/user_001
+```
+
+### 5.5 Run Live Evaluation Audit
+```bash
+curl -s https://parallax-n4it.onrender.com/v1/evaluation
+```
+
+### 5.6 Reset Demo State
+```bash
+curl -s -X POST https://parallax-n4it.onrender.com/v1/reset
+```
+

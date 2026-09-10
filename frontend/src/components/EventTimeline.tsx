@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EventType, ParallaxEvent } from '../types'
-import { ChevronRightIcon, TerminalIcon } from './Icons'
+import { ChevronRightIcon, RadioIcon } from './Icons'
 
 interface EventTimelineProps {
   events: ParallaxEvent[]
@@ -57,38 +57,37 @@ export function EventTimeline({ events, onClear }: EventTimelineProps) {
     <div className="panel event-timeline-panel">
       <div className="panel-header">
         <div className="panel-title-group">
-          <span className="panel-code font-mono">01</span>
-          <h2 className="panel-title">LIVE SESSION STREAM</h2>
+          <h2 className="panel-title">Live Session Stream</h2>
         </div>
         <div className="panel-actions">
-          <span className="event-badge font-mono">
-            {events.length} {events.length === 1 ? 'EVENT' : 'EVENTS'}
+          <span className="event-badge">
+            <span className="font-mono tnum">{events.length}</span> {events.length === 1 ? 'event' : 'events'}
           </span>
           {onClear && events.length > 0 && (
             <button
               onClick={onClear}
-              className="panel-btn font-mono"
+              className="panel-btn"
               title="Clear timeline events"
             >
-              CLEAR
+              Clear
             </button>
           )}
           <button
             onClick={() => setAutoScroll((v) => !v)}
-            className={`panel-btn font-mono ${autoScroll ? 'active' : ''}`}
+            className={`panel-btn ${autoScroll ? 'active' : ''}`}
             title="Auto-scroll to latest incoming event"
           >
-            AUTO-SCROLL {autoScroll ? 'ON' : 'OFF'}
+            Auto-scroll {autoScroll ? 'On' : 'Off'}
           </button>
         </div>
       </div>
 
       <div className="panel-body timeline-body">
         {events.length === 0 ? (
-          <div className="empty-state font-mono">
-            <TerminalIcon size={20} className="empty-icon" />
-            <p>AWAITING INGESTED EVENTS</p>
-            <span className="empty-hint">Execute scenario or stream via POST /v1/events</span>
+          <div className="empty-state">
+            <RadioIcon size={24} className="empty-icon pulse" />
+            <p className="empty-title">Awaiting session events</p>
+            <span className="empty-hint">Step through a scenario or stream via POST /v1/events</span>
           </div>
         ) : (
           <div className="timeline-list">
@@ -123,9 +122,9 @@ export function EventTimeline({ events, onClear }: EventTimelineProps) {
 
                     {isSelected && evt.metadata && (
                       <div className="item-drawer">
-                        <div className="drawer-header font-mono">
-                          <span>PAYLOAD METADATA</span>
-                          <span className="drawer-id">ID: {evt.event_id ?? 'synthetic'}</span>
+                        <div className="drawer-header">
+                          <span>Payload Metadata</span>
+                          <span className="drawer-id font-mono">ID: {evt.event_id ?? 'synthetic'}</span>
                         </div>
                         <pre className="json-dump font-mono">
                           {JSON.stringify(evt.metadata, null, 2)}
@@ -148,9 +147,11 @@ export function EventTimeline({ events, onClear }: EventTimelineProps) {
         )}
       </div>
 
-      <div className="panel-footer font-mono">
-        <span className="footer-label">STREAM PROTOCOL:</span>
-        <span className="footer-val">SSE / v1 / stream / DropOldest</span>
+      <div className="panel-footer">
+        <span className="footer-label">Protocol:</span>
+        <span className="footer-val font-mono">SSE / v1 / stream</span>
+        <span className="footer-sep">·</span>
+        <span className="footer-tag">Buffer Active</span>
       </div>
     </div>
   )

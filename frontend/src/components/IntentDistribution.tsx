@@ -19,7 +19,7 @@ interface ClassConfig {
 const INTENT_CLASSES: ClassConfig[] = [
   {
     key: 'legitimate',
-    label: 'LEGITIMATE',
+    label: 'Legitimate Transfer',
     colorVar: 'var(--intent-legit)',
     bgVar: 'var(--intent-legit-bg)',
     borderVar: 'var(--intent-legit-border)',
@@ -27,7 +27,7 @@ const INTENT_CLASSES: ClassConfig[] = [
   },
   {
     key: 'social_engineering',
-    label: 'SOCIAL ENGINEERING',
+    label: 'Social Engineering',
     colorVar: 'var(--intent-social)',
     bgVar: 'var(--intent-social-bg)',
     borderVar: 'var(--intent-social-border)',
@@ -35,7 +35,7 @@ const INTENT_CLASSES: ClassConfig[] = [
   },
   {
     key: 'account_takeover',
-    label: 'ACCOUNT TAKEOVER',
+    label: 'Account Takeover',
     colorVar: 'var(--intent-ato)',
     bgVar: 'var(--intent-ato-bg)',
     borderVar: 'var(--intent-ato-border)',
@@ -43,7 +43,7 @@ const INTENT_CLASSES: ClassConfig[] = [
   },
   {
     key: 'accidental',
-    label: 'ACCIDENTAL',
+    label: 'Accidental Transfer',
     colorVar: 'var(--intent-accidental)',
     bgVar: 'var(--intent-accidental-bg)',
     borderVar: 'var(--intent-accidental-border)',
@@ -83,12 +83,11 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
     <div className="panel intent-distribution-panel">
       <div className="panel-header">
         <div className="panel-title-group">
-          <span className="panel-code font-mono">02</span>
-          <h2 className="panel-title">INTENT STATE DISTRIBUTION</h2>
+          <h2 className="panel-title">Intent State Distribution</h2>
         </div>
         <div className="panel-actions">
           <span className="state-badge font-mono">
-            {intent ? `${intent.events_seen} EVT OBSERVED` : 'UNINITIALIZED'}
+            {intent ? `${intent.events_seen} events observed` : 'Uninitialized'}
           </span>
         </div>
       </div>
@@ -121,8 +120,8 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
                 <div className="h-header">
                   <div className="h-title-group">
                     <span className="h-dot" />
-                    <span className="h-name font-mono">{cls.label}</span>
-                    {isDominant && <span className="dominant-pill font-mono">DOMINANT</span>}
+                    <span className="h-name">{cls.label}</span>
+                    {isDominant && <span className="dominant-pill">Dominant</span>}
                   </div>
                   <div className="h-metrics font-mono">
                     {deltaPercent !== 0 && (
@@ -148,7 +147,7 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
                   />
                 </div>
 
-                <div className="h-caption font-mono">{cls.description}</div>
+                <div className="h-caption">{cls.description}</div>
               </div>
             )
           })}
@@ -159,7 +158,7 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
           <div className="uncertainty-header">
             <div className="u-label-group">
               <ActivityIcon size={13} className="u-icon" />
-              <span className="u-title font-mono">INTENT UNCERTAINTY (ENTROPY)</span>
+              <span className="u-title">Intent Uncertainty (Entropy)</span>
             </div>
             <div className="u-value-group font-mono">
               <span className={`u-status-tag ${uncertaintySeverity}`}>
@@ -177,9 +176,9 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
           </div>
 
           <div className="uncertainty-ticks font-mono">
-            <span>0.0 DETERMINISTIC</span>
-            <span>0.5 AMBIGUOUS</span>
-            <span>1.0 MAX ENTROPY</span>
+            <span>0.0 Deterministic</span>
+            <span>0.5 Ambiguous</span>
+            <span>1.0 High Entropy</span>
           </div>
 
           <p className="uncertainty-explainer">
@@ -192,9 +191,11 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
         </div>
       </div>
 
-      <div className="panel-footer font-mono">
-        <span className="footer-label">INFERENCE:</span>
-        <span className="footer-val">Latent Bayesian Distribution · P(Intent | E₁...Eₙ)</span>
+      <div className="panel-footer">
+        <span className="footer-label">Model:</span>
+        <span className="footer-val">Bayesian Trajectory Assessment</span>
+        <span className="footer-sep">·</span>
+        <span className="footer-tag">Dynamic Prior</span>
       </div>
     </div>
   )

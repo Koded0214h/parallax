@@ -17,51 +17,51 @@ function getActionMeta(action?: PolicyAction) {
   switch (action) {
     case 'ALLOW':
       return {
-        label: 'ALLOW',
-        statusDesc: 'Transaction permitted without friction',
+        label: 'Allow Transaction',
+        statusDesc: 'Autonomous genuine intent. Transaction permitted without user friction.',
         colorClass: 'action-allow',
         icon: <ShieldCheckIcon size={18} />,
-        tag: 'PERMITTED',
+        tag: 'Permitted',
       }
     case 'VERIFY':
       return {
-        label: 'VERIFY',
-        statusDesc: 'Step-up authentication required',
+        label: 'Step-Up Verification',
+        statusDesc: 'Ambiguous behavioral trajectory. Step-up authentication challenge required.',
         colorClass: 'action-verify',
         icon: <ShieldAlertIcon size={18} />,
-        tag: 'CHALLENGE',
+        tag: 'Challenge Required',
       }
     case 'PROBE':
       return {
-        label: 'INTENT PROBE',
-        statusDesc: 'High uncertainty: Context probe dispatched',
+        label: 'Interactive Intent Probe',
+        statusDesc: 'High uncertainty detected. Conversational context probe dispatched.',
         colorClass: 'action-probe',
         icon: <MessageSquareIcon size={18} />,
-        tag: 'PROBE ACTIVE',
+        tag: 'Probe Active',
       }
     case 'BLOCK':
       return {
-        label: 'BLOCK',
-        statusDesc: 'Immediate authorization denial',
+        label: 'Immediate Block',
+        statusDesc: 'Severe credential anomaly detected. Immediate authorization denial enforced.',
         colorClass: 'action-block',
         icon: <ShieldAlertIcon size={18} />,
-        tag: 'DENIED',
+        tag: 'Blocked',
       }
     case 'ESCALATE':
       return {
-        label: 'ESCALATE / INTERVENE',
-        statusDesc: 'Payment paused for fraud specialist review',
+        label: 'Escalate to Fraud Operations',
+        statusDesc: 'Payment held for specialist intervention and payee corroboration.',
         colorClass: 'action-escalate',
         icon: <ShieldAlertIcon size={18} />,
-        tag: 'INTERVENTION',
+        tag: 'Intervention',
       }
     default:
       return {
-        label: 'AWAITING INGESTION',
-        statusDesc: 'No policy decision rendered yet',
+        label: 'Awaiting Ingestion',
+        statusDesc: 'No policy decision rendered yet. Observing session stream.',
         colorClass: 'action-pending',
         icon: <TerminalIcon size={18} />,
-        tag: 'IDLE',
+        tag: 'Idle',
       }
   }
 }
@@ -79,12 +79,12 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
   // Confidence computation
   const confidenceLevel =
     !intent
-      ? 'NONE'
+      ? 'None'
       : intent.uncertainty < 0.25
-      ? 'HIGH'
+      ? 'High'
       : intent.uncertainty < 0.6
-      ? 'MODERATE'
-      : 'LOW'
+      ? 'Moderate'
+      : 'Low'
 
   const hasActiveProbe =
     intent?.action === 'PROBE' ||
@@ -99,12 +99,11 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
     <div className="panel decision-panel">
       <div className="panel-header">
         <div className="panel-title-group">
-          <span className="panel-code font-mono">03</span>
-          <h2 className="panel-title">DECISION & EVIDENCE ENGINE</h2>
+          <h2 className="panel-title">Decision & Policy Engine</h2>
         </div>
         <div className="panel-actions">
           <span className={`confidence-tag font-mono ${confidenceLevel.toLowerCase()}`}>
-            CONFIDENCE: {confidenceLevel}
+            Confidence: {confidenceLevel}
           </span>
         </div>
       </div>
@@ -115,8 +114,8 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
           <div className="action-card-header">
             <span className="action-icon">{actionMeta.icon}</span>
             <div className="action-title-group">
-              <span className="action-badge font-mono">{actionMeta.tag}</span>
-              <h3 className="action-headline font-mono">{actionMeta.label}</h3>
+              <span className="action-badge">{actionMeta.tag}</span>
+              <h3 className="action-headline">{actionMeta.label}</h3>
             </div>
           </div>
           <p className="action-desc">{actionMeta.statusDesc}</p>
@@ -128,19 +127,19 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
             <div className="probe-header">
               <div className="probe-title-group">
                 <MessageSquareIcon size={14} className="probe-icon" />
-                <span className="probe-title font-mono">INTENT PROBE DIALOGUE</span>
+                <span className="probe-title">Intent Probe Dialogue</span>
               </div>
               <span
-                className={`probe-status-chip font-mono ${
+                className={`probe-status-chip ${
                   hasAnsweredProbe ? 'answered' : 'active'
                 }`}
               >
-                {hasAnsweredProbe ? 'PROBE RESOLVED' : 'AWAITING RESPONSE'}
+                {hasAnsweredProbe ? 'Resolved' : 'Awaiting Response'}
               </span>
             </div>
 
             <div className="probe-prompt">
-              <span className="speaker-tag font-mono">PARALLAX BOT:</span>
+              <span className="speaker-tag">Security Concierge:</span>
               <p className="prompt-text">
                 {intent?.probe?.prompt ??
                   'Please confirm: What is the primary purpose of this transfer?'}
@@ -149,31 +148,31 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
 
             {hasAnsweredProbe ? (
               <div className="probe-response-card">
-                <span className="speaker-tag font-mono">CUSTOMER RESPONSE:</span>
-                <p className="response-text font-mono">
+                <span className="speaker-tag">Customer Response:</span>
+                <p className="response-text">
                   "{intent?.probe?.response}"
                 </p>
-                <div className="nlp-badge-group font-mono">
-                  <span className="nlp-chip">IMPERSONATION SIGNALS DETECTED</span>
-                  <span className="nlp-chip">SAFE ACCOUNT KEYWORDS</span>
+                <div className="nlp-badge-group">
+                  <span className="nlp-chip">Impersonation Signals Detected</span>
+                  <span className="nlp-chip">Safe Account Keywords</span>
                 </div>
               </div>
             ) : (
               <div className="probe-interaction-area">
                 {intent?.probe?.options && intent.probe.options.length > 0 ? (
                   <div className="probe-options-group">
-                    <span className="quick-label font-mono">SELECT CONTEXTUAL RESPONSE:</span>
+                    <span className="quick-label">Select Contextual Response:</span>
                     <div className="probe-options-grid">
                       {intent.probe.options.map((opt) => (
                         <button
                           key={opt.id}
                           onClick={() => onAnswerProbe?.(opt.text)}
-                          className={`probe-option-btn font-mono ${opt.category || ''}`}
+                          className={`probe-option-btn ${opt.category || ''}`}
                           title={`Category: ${opt.category || 'general'}`}
                         >
                           <span className="opt-text">{opt.text}</span>
                           {opt.category && (
-                            <span className="opt-category font-mono">{opt.category.toUpperCase()}</span>
+                            <span className="opt-category">{opt.category}</span>
                           )}
                         </button>
                       ))}
@@ -181,10 +180,10 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
                   </div>
                 ) : (
                   <div className="probe-quick-actions">
-                    <span className="quick-label font-mono">SIMULATE APP SCAM RESPONSE:</span>
+                    <span className="quick-label">Simulate Impersonation Scam Response:</span>
                     <button
                       onClick={() => onAnswerProbe?.(defaultProbeReply)}
-                      className="quick-action-btn font-mono"
+                      className="quick-action-btn"
                       title="Inject synthetic response: Bank fraud squad told me to transfer to safe account"
                     >
                       Inject "Bank instructed me to move funds to safe account"
@@ -199,7 +198,7 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
                       value={customReply}
                       onChange={(e) => setCustomReply(e.target.value)}
                       placeholder="Or type custom customer statement..."
-                      className="custom-probe-field font-mono"
+                      className="custom-probe-field"
                     />
                     <button
                       onClick={() => {
@@ -209,9 +208,9 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
                         }
                       }}
                       disabled={!customReply.trim()}
-                      className="submit-probe-btn font-mono"
+                      className="submit-probe-btn"
                     >
-                      SUBMIT
+                      Submit
                     </button>
                   </div>
                 )}
@@ -222,7 +221,7 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
 
         {/* Grounded Human-Readable Synthesis */}
         <div className="explanation-section">
-          <div className="section-label font-mono">EVIDENCE-GROUNDED SYNTHESIS</div>
+          <div className="section-label">Evidence-Grounded Synthesis</div>
           <div className="explanation-box">
             <p className="explanation-text">
               {intent?.explanation ??
@@ -233,11 +232,11 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
 
         {/* Observable Structured Evidence */}
         <div className="evidence-section">
-          <div className="section-label font-mono">
-            OBSERVED EVIDENCE ({intent?.evidence?.length ?? 0})
+          <div className="section-label">
+            Observed Signals ({intent?.evidence?.length ?? 0})
           </div>
           {(!intent?.evidence || intent.evidence.length === 0) ? (
-            <div className="empty-evidence font-mono">No structured signals detected yet.</div>
+            <div className="empty-evidence">No structured signals detected yet.</div>
           ) : (
             <ul className="evidence-list">
               {intent.evidence.map((item, idx) => (
@@ -246,7 +245,7 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
                     <CheckIcon size={10} />
                   </span>
                   <div className="evidence-text-group">
-                    <span className="evidence-tag font-mono">{formatEvidenceTag(item)}</span>
+                    <span className="evidence-tag">{formatEvidenceTag(item)}</span>
                     <span className="evidence-raw font-mono">{item}</span>
                   </div>
                 </li>
@@ -256,9 +255,11 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
         </div>
       </div>
 
-      <div className="panel-footer font-mono">
-        <span className="footer-label">POLICY ENGINE:</span>
-        <span className="footer-val">Risk × Uncertainty Matrix (prd.md §21.8)</span>
+      <div className="panel-footer">
+        <span className="footer-label">Policy Engine:</span>
+        <span className="footer-val">Risk × Ambiguity Guardrail</span>
+        <span className="footer-sep">·</span>
+        <span className="footer-tag">Active Defense</span>
       </div>
     </div>
   )

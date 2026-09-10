@@ -40,7 +40,7 @@ export function ScenarioBar({
   return (
     <div className="scenario-bar">
       <div className="scenario-selector">
-        <span className="scenario-prefix font-mono">SCENARIO:</span>
+        <span className="scenario-prefix">Scenario:</span>
         <div className="scenario-tabs">
           {scenarios.map((sc, idx) => {
             const isSelected = sc.id === activeScenario.id
@@ -53,7 +53,7 @@ export function ScenarioBar({
               >
                 <span className="tab-code font-mono">{idx + 1}</span>
                 <span className="tab-name">{sc.name}</span>
-                {sc.code === 'C' && <span className="tab-badge">CENTERPIECE</span>}
+                {sc.code === 'C' && <span className="tab-badge attack-badge">Coercion Probe</span>}
               </button>
             )
           })}
@@ -65,7 +65,7 @@ export function ScenarioBar({
           <span className="step-num tnum">{currentStepIndex}</span>
           <span className="step-sep">/</span>
           <span className="step-total tnum">{totalSteps}</span>
-          <span className="step-label">STEPS</span>
+          <span className="step-label">steps</span>
         </div>
 
         <div className="controls-group">
@@ -79,12 +79,12 @@ export function ScenarioBar({
             {isPlaying ? (
               <>
                 <PauseIcon size={12} />
-                <span>PAUSE</span>
+                <span>Pause</span>
               </>
             ) : (
               <>
                 <PlayIcon size={12} />
-                <span>PLAY</span>
+                <span>Play</span>
               </>
             )}
           </button>
@@ -97,7 +97,7 @@ export function ScenarioBar({
             title="Inject next event (Shortcut: Space)"
           >
             <StepForwardIcon size={12} />
-            <span>STEP</span>
+            <span>Step</span>
           </button>
 
           {/* Run End-to-End on Live Go Gateway */}
@@ -109,7 +109,7 @@ export function ScenarioBar({
               title="Run entire scenario end-to-end directly on the live Go gateway pipeline (POST /v1/scenarios/:id/run)"
             >
               <ActivityIcon size={12} />
-              <span>{backendRunning ? 'RUNNING...' : 'RUN ON GATEWAY'}</span>
+              <span>{backendRunning ? 'Running...' : 'Run on Gateway'}</span>
             </button>
           )}
 
@@ -120,13 +120,13 @@ export function ScenarioBar({
             title="Reset trajectory (Shortcut: R)"
           >
             <ResetIcon size={12} />
-            <span>RESET</span>
+            <span>Reset</span>
           </button>
         </div>
 
         <div className="keyboard-hints font-mono">
-          <span className="hint-pill">1-5</span>
-          <span className="hint-pill">SPACE</span>
+          <span className="hint-pill">1–5</span>
+          <span className="hint-pill">Space</span>
           <span className="hint-pill">R</span>
         </div>
       </div>

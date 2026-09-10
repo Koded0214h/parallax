@@ -69,13 +69,14 @@ export function Header({
             </span>
             <span className="brand-name">PARALLAX</span>
           </span>
-          <span className="brand-meta font-mono">INTENT INFERENCE // M1–M6</span>
+          <span className="brand-meta">Payment Intent Inference</span>
+          <span className="brand-version-chip font-mono">v1.2</span>
 
           {/* Explanatory Tooltip for System Architecture */}
           <div className="tooltip-card tooltip-card-left" role="tooltip">
             <div className="tooltip-header">
-              <span className="tooltip-title">PARALLAX RUNTIME ARCHITECTURE</span>
-              <span className="tooltip-tag">M1–M6 PIPELINE</span>
+              <span className="tooltip-title">System Architecture</span>
+              <span className="tooltip-tag">M1–M6 Pipeline</span>
             </div>
             <p className="tooltip-body">
               Real-time cognitive intent inference and event processing pipeline:
@@ -116,19 +117,19 @@ export function Header({
             }`}
           >
             <span className="status-dot" />
-            <span className="status-label font-mono">
+            <span className="status-label">
               {isStreaming && backendHealthy
-                ? 'GATEWAY SSE LIVE'
+                ? 'Gateway SSE Live'
                 : backendHealthy
-                ? 'GATEWAY CONNECTED'
-                : 'STANDALONE ENGINE'}
+                ? 'Gateway Connected'
+                : 'Simulation Engine'}
             </span>
           </span>
 
           {/* Explanatory Tooltip for Engine Connection Status */}
           <div className="tooltip-card tooltip-card-left" role="tooltip">
             <div className="tooltip-header">
-              <span className="tooltip-title">ENGINE RUNTIME STATUS</span>
+              <span className="tooltip-title">Engine Runtime Status</span>
               <span
                 className={`tooltip-tag ${
                   isStreaming && backendHealthy ? 'tag-live' : backendHealthy ? 'tag-ready' : 'tag-standalone'
@@ -139,10 +140,10 @@ export function Header({
             </div>
             <p className="tooltip-body">
               {isStreaming && backendHealthy
-                ? 'Actively streaming live events and intent state updates via Server-Sent Events from Go gateway (:8080).'
+                ? `Actively streaming live events and intent state updates via Server-Sent Events from gateway (${backendTarget}).`
                 : backendHealthy
-                ? 'Connected to Go gateway runtime (:8080). Polling metrics and ready for stream subscription.'
-                : 'Go backend gateway (:8080) is offline. Parallax is running its client-side simulation engine to replay behavioral scenarios locally.'}
+                ? `Connected to Go gateway runtime (${backendTarget}). Polling metrics and ready for stream subscription.`
+                : `Go backend gateway is offline. Parallax is running its client-side simulation engine to replay behavioral scenarios locally.`}
             </p>
             <div className="tooltip-stat-row font-mono">
               <span className="tooltip-stat-label">TARGET</span>
@@ -159,17 +160,17 @@ export function Header({
       </div>
 
       <div className="header-center">
-        <div className="session-pill font-mono tooltip-wrapper" tabIndex={0}>
+        <div className="session-pill tooltip-wrapper" tabIndex={0}>
           <div className="session-field">
-            <span className="session-label">SESSION</span>
-            <span className="session-id">{sessionId}</span>
+            <span className="session-label">Session</span>
+            <span className="session-id font-mono">{sessionId}</span>
           </div>
 
           <div className="session-divider" />
 
           <div className="session-field user-field">
-            <span className="session-label">USER</span>
-            <span className="user-tag">{userId}</span>
+            <span className="session-label">User</span>
+            <span className="user-tag font-mono">{userId}</span>
           </div>
 
           <div className="session-actions">
@@ -183,7 +184,7 @@ export function Header({
               aria-label="Copy session ID"
             >
               {copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
-              <span className="btn-label">{copied ? 'COPIED' : 'COPY'}</span>
+              <span className="btn-label">{copied ? 'Copied' : 'Copy'}</span>
             </button>
             <button
               onClick={(e) => {
@@ -195,15 +196,15 @@ export function Header({
               aria-label="Reset trajectory"
             >
               <ResetIcon size={11} />
-              <span className="btn-label">RESET</span>
+              <span className="btn-label">Reset</span>
             </button>
           </div>
 
           {/* Explanatory Tooltip for Session Pill */}
           <div className="tooltip-card tooltip-card-center" role="tooltip">
             <div className="tooltip-header">
-              <span className="tooltip-title">SESSION & IDENTITY CONTEXT</span>
-              <span className="tooltip-tag">M3 STORE</span>
+              <span className="tooltip-title">Session & Identity Context</span>
+              <span className="tooltip-tag">M3 Store</span>
             </div>
             <p className="tooltip-body">
               Active behavioral trajectory context. Ingested events update this user profile to detect intent shifts (Account Takeover, Social Engineering, or Admin tasks).
@@ -225,17 +226,17 @@ export function Header({
       </div>
 
       <div className="header-right">
-        <div className="telemetry-group font-mono">
+        <div className="telemetry-group">
           {/* Events Metric */}
           <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
             <ActivityIcon size={12} className="telemetry-icon" />
-            <span className="telemetry-val tnum">{eventCount}</span>
-            <span className="telemetry-lbl">EVENTS</span>
+            <span className="telemetry-val font-mono tnum">{eventCount}</span>
+            <span className="telemetry-lbl">events</span>
 
             <div className="tooltip-card tooltip-card-right" role="tooltip">
               <div className="tooltip-header">
-                <span className="tooltip-title">TRAJECTORY EVENTS</span>
-                <span className="tooltip-tag">OBSERVED</span>
+                <span className="tooltip-title">Trajectory Events</span>
+                <span className="tooltip-tag">Observed</span>
               </div>
               <p className="tooltip-body">
                 Sequential audit, network, and security events currently processed in this user session trajectory.
@@ -256,16 +257,16 @@ export function Header({
           {/* Latency Metric */}
           <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
             <RadioIcon size={12} className="telemetry-icon" />
-            <div className="telemetry-val-group">
+            <div className="telemetry-val-group font-mono">
               <span className="telemetry-val tnum">{p50}</span>
               <span className="telemetry-dim tnum">/{p95}</span>
             </div>
-            <span className="telemetry-lbl">LATENCY</span>
+            <span className="telemetry-lbl">latency</span>
 
             <div className="tooltip-card tooltip-card-right" role="tooltip">
               <div className="tooltip-header">
-                <span className="tooltip-title">WORKER POOL LATENCY</span>
-                <span className="tooltip-tag">M5 RESERVOIR</span>
+                <span className="tooltip-title">Worker Pool Latency</span>
+                <span className="tooltip-tag">M5 Reservoir</span>
               </div>
               <p className="tooltip-body">
                 Processing duration across the worker pool from M4 stream fan-out to M5 intent inference resolution.
@@ -289,13 +290,13 @@ export function Header({
 
           {/* Sessions Metric */}
           <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
-            <span className="telemetry-val tnum">{metrics?.sessions ?? 1}</span>
-            <span className="telemetry-lbl">SESSIONS</span>
+            <span className="telemetry-val font-mono tnum">{metrics?.sessions ?? 1}</span>
+            <span className="telemetry-lbl">sessions</span>
 
             <div className="tooltip-card tooltip-card-right" role="tooltip">
               <div className="tooltip-header">
-                <span className="tooltip-title">ACTIVE SESSIONS</span>
-                <span className="tooltip-tag">M3 STORE</span>
+                <span className="tooltip-title">Active Sessions</span>
+                <span className="tooltip-tag">M3 Store</span>
               </div>
               <p className="tooltip-body">
                 Concurrent user trajectories maintained in the M3 sharded in-memory session store.
@@ -317,10 +318,10 @@ export function Header({
           {onOpenBaseline && (
             <button
               onClick={onOpenBaseline}
-              className="telemetry-action-btn font-mono"
-              title="Inspect Customer Behavioural Baseline Profile (PRD §14)"
+              className="telemetry-action-btn"
+              title="Inspect Customer Behavioural Baseline Profile"
             >
-              BASELINE
+              Baseline
             </button>
           )}
 
@@ -328,10 +329,10 @@ export function Header({
           {onOpenEvaluation && (
             <button
               onClick={onOpenEvaluation}
-              className="telemetry-action-btn font-mono highlight-audit"
+              className="telemetry-action-btn highlight-audit"
               title="Inspect Live Model Evaluation Audit Report (175 Sessions, 100% Catch Rate)"
             >
-              AUDIT
+              Audit Suite
             </button>
           )}
 

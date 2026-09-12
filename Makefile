@@ -1,4 +1,4 @@
-.PHONY: dev-backend dev-frontend build test tidy
+.PHONY: dev-backend dev-frontend build test bench tidy
 
 # Run the Go gateway on :8080 (override with PARALLAX_ADDR).
 dev-backend:
@@ -14,6 +14,10 @@ build:
 
 test:
 	cd backend && go test ./...
+
+# End-to-end load run (override with ARGS="-events 500000 -concurrency 8 -runs 5").
+bench:
+	cd backend && go run ./cmd/loadgen $(ARGS)
 
 tidy:
 	cd backend && go mod tidy

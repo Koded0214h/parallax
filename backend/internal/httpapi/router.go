@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/holiday-heartbreaks/parallax/backend/evaluation"
@@ -62,6 +63,19 @@ func (d *Deps) withDefaults() {
 	if d.StartTime.IsZero() {
 		d.StartTime = time.Now()
 	}
+}
+
+// sessionSummary is one row of GET /v1/sessions — enough for a live sessions
+// table without the client fetching every session's /intent individually.
+type sessionSummary struct {
+	SessionID      string  `json:"session_id"`
+	UserID         string  `json:"user_id"`
+	EventCount     int     `json:"event_count"`
+	LastEventType  string  `json:"last_event_type,omitempty"`
+	LastSeen       int64   `json:"last_seen"`
+	DominantIntent string  `json:"dominant_intent,omitempty"`
+	Confidence     float64 `json:"confidence,omitempty"`
+	Action         string  `json:"action,omitempty"`
 }
 
 // NewRouter builds the HTTP handler for the gateway.
@@ -121,6 +135,54 @@ func NewRouterWithDeps(d Deps) http.Handler {
 			"seq":        stored.Seq,
 			"events":     count,
 		})
+	})
+
+	// Live session roster: recent sessions with their last-known decision, so
+	// the frontend can render a "live sessions" view without polling every
+	// session's /intent individually. Cached lookups only — never recomputes.
+	mux.HandleFunc("GET /v1/sessions", func(w http.ResponseWriter, r *http.Request) {
+		limit := 50
+		if q := r.URL.Query().Get("limit"); q != "" {
+			if n, err := strconv.Atoi(q); err == nil && n > 0 {
+				limit = n
+			}
+		}
+
+		views := d.Sessions.List(limit)
+		rows := make([]sessionSummary, 0, len(views))
+		for _, v := range views {
+			row := sessionSummary{
+				SessionID:  v.ID,
+				UserID:     v.UserID,
+				EventCount: len(v.Events),
+				LastSeen:   v.LastSeen.Unix(),
+			}
+			if len(v.Events) > 0 {
+				row.LastEventType = string(v.Events[len(v.Events)-1].Type)
+			}
+			if d.Engine != nil {
+				if intent, ok := d.Engine.GetIntent(v.ID); ok {
+					row.DominantIntent = intent.DominantIntent
+					row.Confidence = intent.Hypotheses[intent.DominantIntent]
+					row.Action = string(intent.Action)
+				}
+			}
+			rows = append(rows, row)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"sessions": rows})
+	})
+
+	// Raw event trajectory for one session — lets a client (e.g. the frontend
+	// reopening a live-feed session in the Playground) replay what actually
+	// happened, not just the current decision.
+	mux.HandleFunc("GET /v1/sessions/{id}/events", func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		events, ok := d.Sessions.Trajectory(id)
+		if !ok {
+			writeErr(w, http.StatusNotFound, "unknown session")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session_id": id, "events": events})
 	})
 
 	// Decision & Intent Inference endpoint

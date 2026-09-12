@@ -40,6 +40,9 @@ inference is*, and *what action is proportional* to both.
 **Challenge:** A1 — Spotting Account Takeover From Behaviour
 **Status:** Hackathon prototype (synthetic data, self-contained)
 
+**Live backend:** [parallax-n4it.onrender.com](https://parallax-n4it.onrender.com) — the
+frontend static site is deployed alongside it via [`render.yaml`](render.yaml).
+
 ---
 
 ## Core concept
@@ -275,35 +278,24 @@ Scenario C is the centrepiece: the transaction is *fully authenticated* and stil
 
 ```
 parallax/
-├── cmd/
-│   ├── gateway/
-│   ├── engine/
-│   └── simulator/
-├── internal/
-│   ├── events/      features/     baseline/
-│   ├── sequence/    intent/       uncertainty/
-│   ├── policy/      probes/       explanation/
-│   └── storage/
-├── pkg/
-│   └── contracts/          # shared event schema
-├── simulator/
-│   ├── users/  scenarios/  generators/
-├── benchmarks/
-├── evaluation/
-├── frontend/
-└── docs/                   # team split, planning
+├── backend/         # Go gateway, decision engine, evaluation suite, load generator (see below)
+├── frontend/         # React + TypeScript console — see docs/frontend.md
+├── docs/              # architecture deep-dives, team split
+├── Dockerfile           # backend container build (deployed to Render)
+├── render.yaml           # Render service definitions (backend + frontend)
+└── Makefile                # dev-backend, dev-frontend, build, test, bench
 ```
-
----
 
 ---
 
 ## Documentation & Architecture Deep-Dives
 
+- [Research & Problem Framing](docs/report.md): Background research (real-world incident patterns, why LLM-as-classifier is weak engineering, intent hypothesis framing) motivating Parallax's design.
 - [Detection Architecture & ML Formulation](docs/detection_architecture.md): Rationale for the hybrid GBDT + Markov transition + Bayesian contextual probe architecture, 21-dimensional feature vectors, synthetic data generation, and mathematical false alarm proof.
 - [USSD Security Architecture](docs/ussd.md): Detailed specification for securing USSD payment rails (`*737#`, etc.) in low-telemetry emerging market environments with telco SIM swap APIs and 182-character interactive intent probes.
-- [Frontend Handoff Guide](HANDOFF.md): Comprehensive developer guide for the frontend team (Fiope) with all API endpoints, schemas, one-click demo scenario runners, and Render deployment instructions.
 - [Backend Runtime Architecture](docs/backend.md): Event bus, worker pools, write-ahead log (WAL), and storage specification.
+- [Frontend Architecture](docs/frontend.md): Views, components, SSE data flow, and dev workflow for the React console.
+- [Frontend Handoff Guide](HANDOFF.md): API endpoints, schemas, one-click demo scenario runners, and Render deployment instructions.
 - [Team Split & Contracts](docs/team.md): Division of engineering ownership.
 
 ---
@@ -320,7 +312,11 @@ make dev-backend
 make dev-frontend
 ```
 
-`make build` compiles both; `make test` runs the Go test suite (`go test -race ./...`).
+`make build` compiles both; `make test` runs the Go test suite (`go test -race ./...`);
+`make bench` runs the in-process end-to-end load generator (`backend/cmd/loadgen`), driving
+synthetic traffic through the real ingest → stream → worker pool → engine pipeline and
+printing a throughput/latency/allocation report (override with
+`ARGS="-events 500000 -concurrency 8 -runs 5"`).
 
 Implementation is **fully production-grade and wired end-to-end**:
 - **Event Gateway**: Ingests, validates, timestamps, normalizes, assigns monotonic per-session sequences (`/v1/events`).

@@ -57,8 +57,9 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Layout Constants */
-  --header-height: 56px;
-  --scenario-bar-height: 50px;
+  --header-height: 64px;
+  --nav-height: 48px;
+  --scenario-bar-height: 58px;
   --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -87,7 +88,7 @@ body {
   background-color: var(--bg-root);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 18px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

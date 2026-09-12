@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -349,3 +350,77 @@ func TestBaselinesAndResetEndpoints(t *testing.T) {
 	}
 }
 
+func TestSessionsListEndpoint(t *testing.T) {
+	srv, _ := testServer(t)
+
+	postEvent(t, srv, `{"session_id":"s1","user_id":"u1","type":"LOGIN"}`).Body.Close()
+	postEvent(t, srv, `{"session_id":"s2","user_id":"u2","type":"LOGIN"}`).Body.Close()
+	postEvent(t, srv, `{"session_id":"s2","user_id":"u2","type":"AMOUNT_ENTERED"}`).Body.Close()
+
+	res, err := http.Get(srv.URL + "/v1/sessions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+
+	body := decode[map[string]any](t, res)
+	rows, ok := body["sessions"].([]any)
+	if !ok || len(rows) != 2 {
+		t.Fatalf("sessions = %v, want 2 rows", body["sessions"])
+	}
+	// Most-recently-active first: s2 had the last event.
+	first := rows[0].(map[string]any)
+	if first["session_id"] != "s2" || first["event_count"].(float64) != 2 {
+		t.Errorf("first row = %+v, want s2 with 2 events", first)
+	}
+}
+
+func TestSessionEventsEndpoint(t *testing.T) {
+	srv, _ := testServer(t)
+	postEvent(t, srv, `{"session_id":"s1","user_id":"u1","type":"LOGIN"}`).Body.Close()
+	postEvent(t, srv, `{"session_id":"s1","user_id":"u1","type":"AMOUNT_ENTERED"}`).Body.Close()
+
+	res, err := http.Get(srv.URL + "/v1/sessions/s1/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", res.StatusCode)
+	}
+	body := decode[map[string]any](t, res)
+	events := body["events"].([]any)
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want 2", len(events))
+	}
+
+	res2, err := http.Get(srv.URL + "/v1/sessions/nope/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res2.Body.Close()
+	if res2.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown session status = %d, want 404", res2.StatusCode)
+	}
+}
+
+func TestSessionsListRespectsLimit(t *testing.T) {
+	srv, _ := testServer(t)
+	for i := range 5 {
+		postEvent(t, srv, fmt.Sprintf(`{"session_id":"s%d","user_id":"u1","type":"LOGIN"}`, i)).Body.Close()
+	}
+
+	res, err := http.Get(srv.URL + "/v1/sessions?limit=2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body := decode[map[string]any](t, res)
+	rows := body["sessions"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("sessions = %d rows, want 2", len(rows))
+	}
+}

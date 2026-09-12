@@ -1,10 +1,13 @@
 // Command gateway is the Parallax event gateway and HTTP entrypoint.
 //
 // Exposes:
+//
 //	GET  /health                        liveness + uptime + counters (for monitoring & Render cron)
 //	GET  /healthz                       standard health check
 //	GET  /v1/metrics                    bus, worker pool, and WAL metrics
 //	POST /v1/events                     ingest a session event
+//	GET  /v1/sessions                   recent sessions with their last-known decision
+//	GET  /v1/sessions/{id}/events       raw event trajectory for a session
 //	GET  /v1/sessions/{id}/intent       real-time intent inference for a session
 //	POST /v1/probes/respond             submit intent probe contextual response
 //	POST /v1/sessions/{id}/probe        submit probe response by session path
@@ -30,6 +33,7 @@ import (
 	"github.com/holiday-heartbreaks/parallax/backend/internal/engine"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/httpapi"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/ingest"
+	"github.com/holiday-heartbreaks/parallax/backend/internal/livefeed"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/session"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/storage"
 	"github.com/holiday-heartbreaks/parallax/backend/internal/stream"
@@ -44,6 +48,7 @@ func main() {
 	// Runtime components
 	bus := stream.New(stream.Options{Logger: logger})
 	sessions := session.New()
+	normalizer := ingest.New()
 	baselines := baseline.NewStore()
 	storageStore := storage.NewMemoryStorage()
 	walBuffer := wal.New(wal.Options{
@@ -68,7 +73,7 @@ func main() {
 	startTime := time.Now()
 	router := httpapi.NewRouterWithDeps(httpapi.Deps{
 		Logger:     logger,
-		Normalizer: ingest.New(),
+		Normalizer: normalizer,
 		Sessions:   sessions,
 		Baselines:  baselines,
 		Bus:        bus,
@@ -100,6 +105,19 @@ func main() {
 	selfPingURL := envOr("PARALLAX_SELF_PING_URL", "https://parallax-n4it.onrender.com/health")
 	if selfPingURL != "" && os.Getenv("PARALLAX_SELF_PING_DISABLED") != "true" {
 		go startSelfPing(ctx, logger, selfPingURL, 2*time.Minute)
+	}
+
+	// Live feed: continuously replays synthetic sessions through the real
+	// pipeline so the dashboard always has genuine, varied live activity to
+	// show (report.md §21-22). Disable for benchmarking or a quiet backend.
+	if os.Getenv("PARALLAX_LIVE_FEED_DISABLED") != "true" {
+		feed := livefeed.New(livefeed.Options{
+			Normalizer: normalizer,
+			Sessions:   sessions,
+			Bus:        bus,
+			Logger:     logger,
+		})
+		go feed.Run(ctx)
 	}
 
 	<-ctx.Done()
@@ -159,4 +177,3 @@ func startSelfPing(ctx context.Context, logger *slog.Logger, targetURL string, i
 		}
 	}
 }
-

@@ -7,6 +7,7 @@ import type {
   EvaluationReport,
   GatewayMetrics,
   IntentResponse,
+  LiveSessionRow,
   ParallaxEvent,
   Scenario,
   ScenarioInfo,
@@ -24,6 +25,7 @@ export type {
   IntentResponse,
   KnownBeneficiary,
   KnownDevice,
+  LiveSessionRow,
   ParallaxEvent,
   PolicyAction,
   ProbeOption,
@@ -71,6 +73,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId, response: responseText }),
     }).then((r) => json<IntentResponse>(r)),
+
+  // Recent sessions the backend has actually seen — the live feed plus
+  // anything driven from this or any other client — with their last-known
+  // cached decision. No per-session recompute.
+  listSessions: (limit = 50) =>
+    fetch(`${API_BASE}/v1/sessions?limit=${limit}`).then((r) =>
+      json<{ sessions: LiveSessionRow[] }>(r),
+    ),
+
+  // Raw event trajectory for one session, e.g. to reopen a live-feed session
+  // in the Playground.
+  sessionEvents: (sessionId: string) =>
+    fetch(`${API_BASE}/v1/sessions/${encodeURIComponent(sessionId)}/events`).then((r) =>
+      json<{ session_id: string; events: ParallaxEvent[] }>(r),
+    ),
 
   getScenarios: () =>
     fetch(`${API_BASE}/v1/scenarios`).then((r) => json<{ scenarios: ScenarioInfo[] }>(r)),
@@ -252,7 +269,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           user_id: 'usr_sarah_chen',
           type: 'AMOUNT_ENTERED',
           metadata: {
-            amount_gbp: 1250.0,
+            amount_ngn: 1250.0,
             user_baseline_avg: 1200.0,
             variance_ratio: 1.04,
           },
@@ -273,7 +290,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
             'amount_within_1.05x_baseline',
           ],
           events_seen: 4,
-          explanation: 'Amount (£1,250) matches 99% expected historical baseline.',
+          explanation: 'Amount (₦1,250) matches 99% expected historical baseline.',
         },
       },
       {
@@ -417,7 +434,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           user_id: 'usr_marcus_vance',
           type: 'AMOUNT_ENTERED',
           metadata: {
-            amount_gbp: 9850.0,
+            amount_ngn: 9850.0,
             user_baseline_avg: 85.0,
             balance_drain_percent: 97.4,
             variance_ratio: 115.8,
@@ -487,7 +504,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
       'Authorized transfer from legitimate phone, but recipient is brand new and amount is anomalous. Rather than blocking blindly, Parallax probes intent.',
     targetAction: 'ESCALATE',
     targetIntentClass: 'social_engineering',
-    probePrompt: 'Please confirm: What is the purpose of this £4,250 transfer?',
+    probePrompt: 'Please confirm: What is the purpose of this ₦4,250 transfer?',
     probeResponse:
       'The bank fraud squad phoned me saying my account was compromised and instructed me to move funds into this safe holding account.',
     steps: [
@@ -552,7 +569,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           user_id: 'usr_elena_rostova',
           type: 'AMOUNT_ENTERED',
           metadata: {
-            amount_gbp: 4250.0,
+            amount_ngn: 4250.0,
             user_baseline_avg: 120.0,
             variance_ratio: 35.4,
             interaction_hesitation_ms: 14200,
@@ -578,7 +595,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           explanation:
             'Conflicting signals: Fully authenticated known user, but extreme amount deviation and hesitation. Risk is elevated while intent explanation is uncertain. Decision: Trigger Intent Probe.',
           probe: {
-            prompt: 'Please confirm: What is the purpose of this £4,250 transfer?',
+            prompt: 'Please confirm: What is the purpose of this ₦4,250 transfer?',
             status: 'pending',
           },
         },
@@ -613,7 +630,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           events_seen: 4,
           explanation: 'Intent probe active. Awaiting natural contextual feedback from user before irreversible authorization.',
           probe: {
-            prompt: 'Please confirm: What is the purpose of this £4,250 transfer?',
+            prompt: 'Please confirm: What is the purpose of this ₦4,250 transfer?',
             status: 'pending',
           },
         },
@@ -651,7 +668,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           explanation:
             'Intent probe response collapsed uncertainty: User states they were directed by a caller claiming to be bank security. Clear Authorized Push Payment (APP) scam in progress. Action: INTERVENE & ESCALATE to human fraud specialist.',
           probe: {
-            prompt: 'Please confirm: What is the purpose of this £4,250 transfer?',
+            prompt: 'Please confirm: What is the purpose of this ₦4,250 transfer?',
             response:
               'The bank fraud squad phoned me saying my account was compromised and instructed me to move funds into this safe holding account.',
             status: 'answered',
@@ -667,7 +684,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
     name: 'Accidental Transfer',
     tagline: 'Digit transpose, repeated frantic cancellation attempts',
     description:
-      'User intends to pay £55.00 but accidentally enters £5,500.00, rapidly hits backspace and attempts quick retry.',
+      'User intends to pay ₦55.00 but accidentally enters ₦5,500.00, rapidly hits backspace and attempts quick retry.',
     targetAction: 'VERIFY',
     targetIntentClass: 'accidental',
     steps: [
@@ -730,7 +747,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
           user_id: 'usr_david_okafor',
           type: 'AMOUNT_ENTERED',
           metadata: {
-            amount_gbp: 5500.0,
+            amount_ngn: 5500.0,
             intended_likely: 55.0,
             magnitude_error_factor: 100.0,
             interaction_rapid_backspaces: 4,
@@ -753,7 +770,7 @@ export const DEMO_SCENARIOS: Scenario[] = [
             'rapid_backspace_keystroke_burst',
           ],
           events_seen: 3,
-          explanation: 'Amount (£5,500) represents exactly 100× normal utility invoice (£55). Frantic keystroke edits detected. Probability strongly favors accidental slip.',
+          explanation: 'Amount (₦5,500) represents exactly 100× normal utility invoice (₦55). Frantic keystroke edits detected. Probability strongly favors accidental slip.',
         },
       },
     ],

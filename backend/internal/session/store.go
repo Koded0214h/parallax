@@ -9,6 +9,7 @@ package session
 
 import (
 	"hash/fnv"
+	"sort"
 	"sync"
 	"time"
 
@@ -138,6 +139,33 @@ func (s *Store) Snapshot(sessionID string) (View, bool) {
 	}, true
 }
 
+// List returns up to limit sessions across all shards, most-recently-active
+// first. It copies each session's event slice, same as Snapshot, so callers
+// can't mutate store state. limit <= 0 means "all".
+func (s *Store) List(limit int) []View {
+	var all []View
+	for _, sh := range s.shards {
+		sh.mu.RLock()
+		for _, sess := range sh.m {
+			events := make([]contracts.Event, len(sess.Events))
+			copy(events, sess.Events)
+			all = append(all, View{
+				ID:        sess.ID,
+				UserID:    sess.UserID,
+				CreatedAt: sess.CreatedAt,
+				LastSeen:  sess.LastSeen,
+				Events:    events,
+			})
+		}
+		sh.mu.RUnlock()
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].LastSeen.After(all[j].LastSeen) })
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all
+}
+
 // Count returns the total number of live sessions across all shards.
 func (s *Store) Count() int {
 	total := 0
@@ -157,4 +185,3 @@ func (s *Store) Reset() {
 		sh.mu.Unlock()
 	}
 }
-

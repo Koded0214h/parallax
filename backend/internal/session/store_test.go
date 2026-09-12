@@ -194,3 +194,34 @@ func TestConcurrentAppendsSameSessionAreSerialized(t *testing.T) {
 		seen[e.Seq] = true
 	}
 }
+
+func TestListSortedMostRecentFirstAndLimited(t *testing.T) {
+	tick := time.Unix(1_000, 0)
+	s := New()
+	s.now = func() time.Time { return tick }
+
+	s.Append(evt("s1", "u1", contracts.EventLogin))
+	tick = tick.Add(time.Second)
+	s.Append(evt("s2", "u2", contracts.EventLogin))
+	tick = tick.Add(time.Second)
+	s.Append(evt("s3", "u3", contracts.EventLogin))
+
+	all := s.List(0)
+	if len(all) != 3 {
+		t.Fatalf("List(0) = %d sessions, want 3", len(all))
+	}
+	if all[0].ID != "s3" || all[1].ID != "s2" || all[2].ID != "s1" {
+		t.Fatalf("List not sorted most-recent-first: %v, %v, %v", all[0].ID, all[1].ID, all[2].ID)
+	}
+
+	limited := s.List(2)
+	if len(limited) != 2 || limited[0].ID != "s3" || limited[1].ID != "s2" {
+		t.Fatalf("List(2) = %+v, want [s3, s2]", limited)
+	}
+}
+
+func TestListOnEmptyStore(t *testing.T) {
+	if got := New().List(10); len(got) != 0 {
+		t.Errorf("List on empty store = %v, want empty", got)
+	}
+}

@@ -158,8 +158,11 @@ export function EventTimeline({ events, onClear }: EventTimelineProps) {
 }
 
 function getSummaryMetadata(_type: EventType | string, meta: Record<string, unknown>): string {
-  if (meta.amount_gbp !== undefined) {
-    return `£${Number(meta.amount_gbp).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`
+  if (meta.amount_ngn !== undefined) {
+    return `₦${Number(meta.amount_ngn).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
+  }
+  if (meta.amount !== undefined) {
+    return `₦${Number(meta.amount).toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
   }
   if (meta.new_device) {
     return String(meta.new_device)

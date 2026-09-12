@@ -170,19 +170,19 @@ export function BaselineModal({ userId, isOpen, onClose }: BaselineModalProps) {
                 <div className="b-stat-card">
                   <span className="b-stat-label">Typical Mean</span>
                   <span className="b-stat-val font-mono tnum">
-                    £{baseline.typical_amount_mean.toLocaleString()}
+                    ₦{baseline.typical_amount_mean.toLocaleString()}
                   </span>
                   <span className="b-stat-sub font-mono">
-                    Std Dev: ±£{baseline.typical_amount_std_dev.toLocaleString()}
+                    Std Dev: ±₦{baseline.typical_amount_std_dev.toLocaleString()}
                   </span>
                 </div>
 
                 <div className="b-stat-card">
                   <span className="b-stat-label">Expected Range</span>
                   <span className="b-stat-val font-mono tnum">
-                    £{baseline.typical_amount_min.toLocaleString()} – £{baseline.typical_amount_max.toLocaleString()}
+                    ₦{baseline.typical_amount_min.toLocaleString()} – ₦{baseline.typical_amount_max.toLocaleString()}
                   </span>
-                  <span className="b-stat-sub font-mono">Historical Max: £{(baseline.max_daily_amount || 250000).toLocaleString()}</span>
+                  <span className="b-stat-sub font-mono">Historical Max: ₦{(baseline.max_daily_amount || 250000).toLocaleString()}</span>
                 </div>
 
                 <div className="b-stat-card">
@@ -206,7 +206,7 @@ export function BaselineModal({ userId, isOpen, onClose }: BaselineModalProps) {
                       </div>
                       <div className="ben-bottom font-mono">
                         <span>{ben.bank_name} · Acc: {ben.account_number}</span>
-                        <span className="ben-total tnum">Total: £{ben.total_sent.toLocaleString()}</span>
+                        <span className="ben-total tnum">Total: ₦{ben.total_sent.toLocaleString()}</span>
                       </div>
                     </div>
                   ))}

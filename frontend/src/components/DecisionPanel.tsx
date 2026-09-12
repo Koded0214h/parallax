@@ -96,7 +96,7 @@ export function DecisionPanel({ intent, onAnswerProbe }: DecisionPanelProps) {
     'The bank fraud squad phoned me saying my account was compromised and instructed me to move funds into this safe holding account.'
 
   return (
-    <div className="panel decision-panel">
+    <div className="panel decision-panel" data-tour="tour-decision">
       <div className="panel-header">
         <div className="panel-title-group">
           <h2 className="panel-title">Decision & Policy Engine</h2>

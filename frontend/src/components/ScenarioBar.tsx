@@ -5,6 +5,7 @@ import {
   PlayIcon,
   ResetIcon,
   StepForwardIcon,
+  TerminalIcon,
 } from './Icons'
 
 interface ScenarioBarProps {
@@ -19,6 +20,7 @@ interface ScenarioBarProps {
   backendHealthy?: boolean
   backendRunning?: boolean
   onRunBackend?: () => void
+  onOpenComposer?: () => void
 }
 
 export function ScenarioBar({
@@ -33,53 +35,53 @@ export function ScenarioBar({
   backendHealthy,
   backendRunning,
   onRunBackend,
+  onOpenComposer,
 }: ScenarioBarProps) {
   const totalSteps = activeScenario.steps.length
   const isFinished = currentStepIndex >= totalSteps
+  const canResume = !isPlaying && !isFinished && currentStepIndex > 0
 
   return (
     <div className="scenario-bar">
-      <div className="scenario-selector">
+      <div className="scenario-selector" data-tour="tour-scenarios">
         <span className="scenario-prefix">Scenario:</span>
-        <div className="scenario-tabs">
-          {scenarios.map((sc, idx) => {
-            const isSelected = sc.id === activeScenario.id
-            return (
-              <button
-                key={sc.id}
-                onClick={() => onSelectScenario(sc)}
-                className={`scenario-tab ${isSelected ? 'active' : ''}`}
-                title={sc.description}
-              >
-                <span className="tab-code font-mono">{idx + 1}</span>
-                <span className="tab-name">{sc.name}</span>
-                {sc.code === 'C' && <span className="tab-badge attack-badge">Coercion Probe</span>}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="scenario-controls">
-        <div className="step-counter font-mono">
+        <select
+          className="scenario-select"
+          value={activeScenario.id}
+          onChange={(e) => {
+            const next = scenarios.find((s) => s.id === e.target.value)
+            if (next) onSelectScenario(next)
+          }}
+        >
+          {scenarios.map((sc, idx) => (
+            <option key={sc.id} value={sc.id}>
+              {idx + 1}. {sc.name}
+              {sc.code === 'C' ? ' — Coercion Probe' : ''}
+            </option>
+          ))}
+        </select>
+        <span className="step-counter font-mono">
           <span className="step-num tnum">{currentStepIndex}</span>
           <span className="step-sep">/</span>
           <span className="step-total tnum">{totalSteps}</span>
           <span className="step-label">steps</span>
-        </div>
+        </span>
+      </div>
 
+      <div className="scenario-controls">
         <div className="controls-group">
-          {/* Step-by-Step Play/Pause */}
+          {/* Play / Stop */}
           <button
             onClick={onTogglePlay}
             disabled={isFinished}
             className={`control-btn primary ${isPlaying ? 'playing' : ''}`}
-            title={isPlaying ? 'Pause scenario playback' : 'Play scenario trajectory'}
+            title={isPlaying ? 'Stop scenario playback' : 'Play scenario trajectory'}
+            data-tour="tour-play"
           >
             {isPlaying ? (
               <>
                 <PauseIcon size={12} />
-                <span>Pause</span>
+                <span>Stop</span>
               </>
             ) : (
               <>
@@ -87,6 +89,17 @@ export function ScenarioBar({
                 <span>Play</span>
               </>
             )}
+          </button>
+
+          {/* Resume from a paused mid-scenario position */}
+          <button
+            onClick={onTogglePlay}
+            disabled={!canResume}
+            className="control-btn"
+            title="Resume auto-play from where you stopped"
+          >
+            <PlayIcon size={12} />
+            <span>Resume</span>
           </button>
 
           {/* Single Step Forward */}
@@ -100,6 +113,14 @@ export function ScenarioBar({
             <span>Step</span>
           </button>
 
+          {/* Reset */}
+          <button onClick={onReset} className="control-btn reset" title="Reset trajectory (Shortcut: R)">
+            <ResetIcon size={12} />
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <div className="controls-group controls-group-secondary">
           {/* Run End-to-End on Live Go Gateway */}
           {backendHealthy && onRunBackend && (
             <button
@@ -109,25 +130,22 @@ export function ScenarioBar({
               title="Run entire scenario end-to-end directly on the live Go gateway pipeline (POST /v1/scenarios/:id/run)"
             >
               <ActivityIcon size={12} />
-              <span>{backendRunning ? 'Running...' : 'Run on Gateway'}</span>
+              <span>{backendRunning ? 'Running…' : 'Run on Gateway'}</span>
             </button>
           )}
 
-          {/* Reset */}
-          <button
-            onClick={onReset}
-            className="control-btn reset"
-            title="Reset trajectory (Shortcut: R)"
-          >
-            <ResetIcon size={12} />
-            <span>Reset</span>
-          </button>
-        </div>
-
-        <div className="keyboard-hints font-mono">
-          <span className="hint-pill">1–5</span>
-          <span className="hint-pill">Space</span>
-          <span className="hint-pill">R</span>
+          {/* Hand-build one event */}
+          {onOpenComposer && (
+            <button
+              onClick={onOpenComposer}
+              className="control-btn compose"
+              title="Compose a single custom event by hand"
+              data-tour="tour-compose"
+            >
+              <TerminalIcon size={12} />
+              <span>Compose Event</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -14,9 +14,9 @@ engine (fluxx) consumes what this layer produces and never reaches around it.
 | M4 | `internal/stream` | In-process event bus: hub goroutine, fan-out to workers + frontend + WAL, per-subscription bounded buffers with overflow policy, `Publish` backpressure. | **done** |
 | M5 | `internal/worker` | Bounded worker pool draining a stream subscription; `Processor` interface fluxx implements; panic isolation, graceful/forced drain, latency reservoir (p50/p95/p99). | **done** |
 | M6 | `internal/httpapi` + `cmd/gateway` | HTTP transport wired end to end: `POST /v1/events` → ingest → session → bus → pool; `GET /v1/stream` (SSE); `GET /v1/metrics`, `GET /healthz` (bus + pool counters); `GET /v1/sessions/{id}/intent` (placeholder). | **done** |
-| M7 | `internal/wal` | Offline event buffer + reconnect replay into storage (prd.md §28). | todo |
-| M8 | `internal/storage` | Persistence interface + in-memory and SQLite implementations. | todo |
-| M9 | `bench/` | Load generator + latency/throughput harness: events/sec, p50/p95/p99, CPU, mem. | todo |
+| M7 | `internal/wal` | Offline event buffer + reconnect replay into storage (prd.md §28). | **done** (fluxx) |
+| M8 | `internal/storage` | Persistence interface + implementations. | **done** (fluxx) |
+| M9 | `bench/` + `cmd/loadgen` | End-to-end load harness (`bench.Harness`) + CLI: events/sec, p50/p95/p99, alloc, GC. `make bench`. | **done** |
 
 ## Pipeline
 

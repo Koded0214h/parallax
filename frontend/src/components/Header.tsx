@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { GatewayMetrics } from '../types'
-import { ActivityIcon, CheckIcon, CopyIcon, InfoIcon, RadioIcon, ResetIcon } from './Icons'
+import { CheckIcon, CompassIcon, CopyIcon, DatabaseIcon } from './Icons'
+import { TechnicalitiesMenu } from './TechnicalitiesMenu'
 
 interface HeaderProps {
   sessionId: string
@@ -9,11 +10,15 @@ interface HeaderProps {
   backendHealthy: boolean
   metrics: GatewayMetrics | null
   eventCount: number
-  onResetSession: () => void
   onOpenBaseline?: () => void
   onOpenEvaluation?: () => void
+  onStartTour?: () => void
+  onOpenDataStream?: () => void
 }
 
+// Logo on the left. Session / User / Technicalities in the middle. Data,
+// Tour, Baseline, Audit on the right. Nothing else — the tiny nav underneath
+// carries the actual sections.
 export function Header({
   sessionId,
   userId,
@@ -21,46 +26,23 @@ export function Header({
   backendHealthy,
   metrics,
   eventCount,
-  onResetSession,
   onOpenBaseline,
   onOpenEvaluation,
+  onStartTour,
+  onOpenDataStream,
 }: HeaderProps) {
   const [copied, setCopied] = useState(false)
-  const [showSystemGuide, setShowSystemGuide] = useState(false)
 
-  const copySession = () => {
-    navigator.clipboard.writeText(sessionId)
+  function copySession() {
+    navigator.clipboard.writeText(sessionId).catch(() => {})
     setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
+    setTimeout(() => setCopied(false), 1200)
   }
-
-  // Format latency in microseconds or milliseconds (handling both Go LatencyStats cases)
-  const rawP50 =
-    metrics?.pool?.latency?.P50 ??
-    metrics?.pool?.Latency?.P50 ??
-    metrics?.pool?.latency?.p50_nanos ??
-    metrics?.pool?.latency?.p50_ns
-  const p50 =
-    rawP50 !== undefined
-      ? `${(rawP50 / 1_000_000).toFixed(2)}ms`
-      : '0.42ms'
-
-  const rawP95 =
-    metrics?.pool?.latency?.P95 ??
-    metrics?.pool?.Latency?.P95 ??
-    metrics?.pool?.latency?.p95_nanos ??
-    metrics?.pool?.latency?.p95_ns
-  const p95 =
-    rawP95 !== undefined
-      ? `${(rawP95 / 1_000_000).toFixed(2)}ms`
-      : '1.18ms'
-
-  const backendTarget = import.meta.env.VITE_API_URL || 'localhost:8080'
 
   return (
     <header className="parallax-header">
       <div className="header-left">
-        <div className="brand tooltip-wrapper" tabIndex={0}>
+        <div className="brand">
           <span className="brand-logo">
             <span className="logo-bars">
               <span className="bar bar-1" />
@@ -69,307 +51,74 @@ export function Header({
             </span>
             <span className="brand-name">PARALLAX</span>
           </span>
-          <span className="brand-meta">Payment Intent Inference</span>
-          <span className="brand-version-chip font-mono">v1.2</span>
-
-          {/* Explanatory Tooltip for System Architecture */}
-          <div className="tooltip-card tooltip-card-left" role="tooltip">
-            <div className="tooltip-header">
-              <span className="tooltip-title">System Architecture</span>
-              <span className="tooltip-tag">M1–M6 Pipeline</span>
-            </div>
-            <p className="tooltip-body">
-              Real-time cognitive intent inference and event processing pipeline:
-            </p>
-            <div className="tooltip-modules-list font-mono">
-              <div className="tooltip-module-item">
-                <span className="mod-code">M1</span>
-                <span className="mod-desc"><strong>Contracts:</strong> Unified event & intent schemas</span>
-              </div>
-              <div className="tooltip-module-item">
-                <span className="mod-code">M2</span>
-                <span className="mod-desc"><strong>Ingest:</strong> Validation, normalization & seq</span>
-              </div>
-              <div className="tooltip-module-item">
-                <span className="mod-code">M3</span>
-                <span className="mod-desc"><strong>Session:</strong> In-memory trajectory state store</span>
-              </div>
-              <div className="tooltip-module-item">
-                <span className="mod-code">M4</span>
-                <span className="mod-desc"><strong>Stream:</strong> Fan-out bus with backpressure</span>
-              </div>
-              <div className="tooltip-module-item">
-                <span className="mod-code">M5</span>
-                <span className="mod-desc"><strong>Worker:</strong> Bounded pool & latency reservoir</span>
-              </div>
-              <div className="tooltip-module-item">
-                <span className="mod-code">M6</span>
-                <span className="mod-desc"><strong>Gateway:</strong> HTTP API & real-time SSE stream</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="connection-status tooltip-wrapper" tabIndex={0}>
           <span
-            className={`status-indicator ${
-              isStreaming && backendHealthy ? 'live' : backendHealthy ? 'ready' : 'standalone'
-            }`}
+            className={`brand-live-dot ${isStreaming && backendHealthy ? 'live' : backendHealthy ? 'ready' : 'standalone'}`}
+            title={
+              isStreaming && backendHealthy
+                ? 'Gateway SSE live'
+                : backendHealthy
+                  ? 'Gateway connected'
+                  : 'Simulation mode — gateway offline'
+            }
+          />
+          <span
+            className="brand-sim-chip font-mono"
+            title="No real accounts, banks, or people — every event, user and balance on this screen is generated."
           >
-            <span className="status-dot" />
-            <span className="status-label">
-              {isStreaming && backendHealthy
-                ? 'Gateway SSE Live'
-                : backendHealthy
-                ? 'Gateway Connected'
-                : 'Simulation Engine'}
-            </span>
+            SYNTHETIC DATA
           </span>
-
-          {/* Explanatory Tooltip for Engine Connection Status */}
-          <div className="tooltip-card tooltip-card-left" role="tooltip">
-            <div className="tooltip-header">
-              <span className="tooltip-title">Engine Runtime Status</span>
-              <span
-                className={`tooltip-tag ${
-                  isStreaming && backendHealthy ? 'tag-live' : backendHealthy ? 'tag-ready' : 'tag-standalone'
-                }`}
-              >
-                {isStreaming && backendHealthy ? 'LIVE SSE' : backendHealthy ? 'CONNECTED' : 'SIMULATION'}
-              </span>
-            </div>
-            <p className="tooltip-body">
-              {isStreaming && backendHealthy
-                ? `Actively streaming live events and intent state updates via Server-Sent Events from gateway (${backendTarget}).`
-                : backendHealthy
-                ? `Connected to Go gateway runtime (${backendTarget}). Polling metrics and ready for stream subscription.`
-                : `Go backend gateway is offline. Parallax is running its client-side simulation engine to replay behavioral scenarios locally.`}
-            </p>
-            <div className="tooltip-stat-row font-mono">
-              <span className="tooltip-stat-label">TARGET</span>
-              <span className="tooltip-stat-value">{backendTarget}</span>
-            </div>
-            <div className="tooltip-stat-row font-mono">
-              <span className="tooltip-stat-label">MODE</span>
-              <span className="tooltip-stat-value">
-                {backendHealthy ? 'Go Gateway Runtime' : 'Client Simulation Engine'}
-              </span>
-            </div>
-          </div>
         </div>
       </div>
 
       <div className="header-center">
-        <div className="session-pill tooltip-wrapper" tabIndex={0}>
-          <div className="session-field">
-            <span className="session-label">Session</span>
-            <span className="session-id font-mono">{sessionId}</span>
-          </div>
+        <button className="nav-tab header-id-btn" onClick={copySession} title="Copy session ID">
+          <span className="header-id-label">Session</span>
+          <span className="font-mono">{sessionId}</span>
+          {copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
+        </button>
 
-          <div className="session-divider" />
+        <button className="nav-tab header-id-btn" title={userId}>
+          <span className="header-id-label">User</span>
+          <span className="font-mono">{userId}</span>
+        </button>
 
-          <div className="session-field user-field">
-            <span className="session-label">User</span>
-            <span className="user-tag font-mono">{userId}</span>
-          </div>
-
-          <div className="session-actions">
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                copySession()
-              }}
-              className={`session-action-btn ${copied ? 'copied' : ''}`}
-              title={copied ? 'Copied to clipboard!' : 'Copy session ID'}
-              aria-label="Copy session ID"
-            >
-              {copied ? <CheckIcon size={11} /> : <CopyIcon size={11} />}
-              <span className="btn-label">{copied ? 'Copied' : 'Copy'}</span>
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onResetSession()
-              }}
-              className="session-action-btn reset"
-              title="Reset trajectory: re-initialize events to step 0"
-              aria-label="Reset trajectory"
-            >
-              <ResetIcon size={11} />
-              <span className="btn-label">Reset</span>
-            </button>
-          </div>
-
-          {/* Explanatory Tooltip for Session Pill */}
-          <div className="tooltip-card tooltip-card-center" role="tooltip">
-            <div className="tooltip-header">
-              <span className="tooltip-title">Session & Identity Context</span>
-              <span className="tooltip-tag">M3 Store</span>
-            </div>
-            <p className="tooltip-body">
-              Active behavioral trajectory context. Ingested events update this user profile to detect intent shifts (Account Takeover, Social Engineering, or Admin tasks).
-            </p>
-            <div className="tooltip-stat-row font-mono">
-              <span className="tooltip-stat-label">SESSION ID</span>
-              <span className="tooltip-stat-value">{sessionId}</span>
-            </div>
-            <div className="tooltip-stat-row font-mono">
-              <span className="tooltip-stat-label">TARGET USER</span>
-              <span className="tooltip-stat-value">{userId}</span>
-            </div>
-            <div className="tooltip-stat-row font-mono">
-              <span className="tooltip-stat-label">CONTROLS</span>
-              <span className="tooltip-stat-value">Copy ID · Reset to Step 0</span>
-            </div>
-          </div>
-        </div>
+        <TechnicalitiesMenu metrics={metrics} eventCount={eventCount} />
       </div>
 
       <div className="header-right">
-        <div className="telemetry-group">
-          {/* Events Metric */}
-          <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
-            <ActivityIcon size={12} className="telemetry-icon" />
-            <span className="telemetry-val font-mono tnum">{eventCount}</span>
-            <span className="telemetry-lbl">events</span>
-
-            <div className="tooltip-card tooltip-card-right" role="tooltip">
-              <div className="tooltip-header">
-                <span className="tooltip-title">Trajectory Events</span>
-                <span className="tooltip-tag">Observed</span>
-              </div>
-              <p className="tooltip-body">
-                Sequential audit, network, and security events currently processed in this user session trajectory.
-              </p>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">EVENT COUNT</span>
-                <span className="tooltip-stat-value tnum">{eventCount}</span>
-              </div>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">PIPELINE STAGE</span>
-                <span className="tooltip-stat-value">M2 Ingest → M3 Store</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="telemetry-divider" />
-
-          {/* Latency Metric */}
-          <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
-            <RadioIcon size={12} className="telemetry-icon" />
-            <div className="telemetry-val-group font-mono">
-              <span className="telemetry-val tnum">{p50}</span>
-              <span className="telemetry-dim tnum">/{p95}</span>
-            </div>
-            <span className="telemetry-lbl">latency</span>
-
-            <div className="tooltip-card tooltip-card-right" role="tooltip">
-              <div className="tooltip-header">
-                <span className="tooltip-title">Worker Pool Latency</span>
-                <span className="tooltip-tag">M5 Reservoir</span>
-              </div>
-              <p className="tooltip-body">
-                Processing duration across the worker pool from M4 stream fan-out to M5 intent inference resolution.
-              </p>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">p50 (MEDIAN)</span>
-                <span className="tooltip-stat-value tnum">{p50}</span>
-              </div>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">p95 (95TH %ILE)</span>
-                <span className="tooltip-stat-value tnum">{p95}</span>
-              </div>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">TARGET SLA</span>
-                <span className="tooltip-stat-value">&lt; 5.00ms</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="telemetry-divider" />
-
-          {/* Sessions Metric */}
-          <div className="telemetry-item tooltip-wrapper" tabIndex={0}>
-            <span className="telemetry-val font-mono tnum">{metrics?.sessions ?? 1}</span>
-            <span className="telemetry-lbl">sessions</span>
-
-            <div className="tooltip-card tooltip-card-right" role="tooltip">
-              <div className="tooltip-header">
-                <span className="tooltip-title">Active Sessions</span>
-                <span className="tooltip-tag">M3 Store</span>
-              </div>
-              <p className="tooltip-body">
-                Concurrent user trajectories maintained in the M3 sharded in-memory session store.
-              </p>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">ACTIVE SESSIONS</span>
-                <span className="tooltip-stat-value tnum">{metrics?.sessions ?? 1}</span>
-              </div>
-              <div className="tooltip-stat-row font-mono">
-                <span className="tooltip-stat-label">STORE TYPE</span>
-                <span className="tooltip-stat-value">Sharded RAM</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="telemetry-divider" />
-
-          {/* Customer Baseline Inspector */}
-          {onOpenBaseline && (
-            <button
-              onClick={onOpenBaseline}
-              className="telemetry-action-btn"
-              title="Inspect Customer Behavioural Baseline Profile"
-            >
-              Baseline
-            </button>
-          )}
-
-          {/* Model Evaluation Audit */}
-          {onOpenEvaluation && (
-            <button
-              onClick={onOpenEvaluation}
-              className="telemetry-action-btn highlight-audit"
-              title="Inspect Live Model Evaluation Audit Report (175 Sessions, 100% Catch Rate)"
-            >
-              Audit Suite
-            </button>
-          )}
-
-          {/* Explanatory Info Help Button */}
+        {onOpenDataStream && (
           <button
-            onClick={() => setShowSystemGuide((v) => !v)}
-            className={`telemetry-info-btn ${showSystemGuide ? 'active' : ''}`}
-            title="Toggle Architecture & Telemetry Guide"
-            aria-label="Toggle telemetry guide"
+            onClick={onOpenDataStream}
+            className="telemetry-action-btn"
+            title="Watch the raw event stream moving through Parallax"
           >
-            <InfoIcon size={12} />
+            <DatabaseIcon size={11} /> Data
           </button>
-        </div>
+        )}
+        {onStartTour && (
+          <button onClick={onStartTour} className="telemetry-action-btn" title="Replay the guided walkthrough">
+            <CompassIcon size={11} /> Tour
+          </button>
+        )}
+        {onOpenBaseline && (
+          <button
+            onClick={onOpenBaseline}
+            className="telemetry-action-btn"
+            title="Inspect customer behavioural baseline profile"
+          >
+            Baseline
+          </button>
+        )}
+        {onOpenEvaluation && (
+          <button
+            onClick={onOpenEvaluation}
+            className="telemetry-action-btn highlight-audit"
+            title="Inspect the live model evaluation / audit report"
+          >
+            Audit
+          </button>
+        )}
       </div>
-
-      {/* Quick Interactive Guide Banner when Info is toggled */}
-      {showSystemGuide && (
-        <div className="system-guide-banner font-mono" role="region" aria-label="Telemetry Explainer">
-          <div className="guide-content">
-            <span className="guide-badge">SYSTEM GUIDE</span>
-            <div className="guide-items">
-              <span className="guide-chip"><strong>EVENTS:</strong> Ingested trajectory events</span>
-              <span className="guide-chip"><strong>LATENCY:</strong> Worker pool p50 &amp; p95 processing duration</span>
-              <span className="guide-chip"><strong>SESSIONS:</strong> Active trajectories in memory store</span>
-              <span className="guide-chip"><strong>ENGINE:</strong> Go gateway (:8080) vs client simulation</span>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowSystemGuide(false)}
-            className="guide-close-btn"
-            aria-label="Close guide"
-          >
-            ✕
-          </button>
-        </div>
-      )}
     </header>
   )
 }
-

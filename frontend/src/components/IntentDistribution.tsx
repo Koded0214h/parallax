@@ -1,55 +1,12 @@
 import { useMemo } from 'react'
 import type { IntentClass, IntentResponse } from '../types'
 import { ActivityIcon } from './Icons'
+import { IntentBarChart } from './IntentBarChart'
 
 interface IntentDistributionProps {
   intent: IntentResponse | null
   prevIntent: IntentResponse | null
 }
-
-interface ClassConfig {
-  key: IntentClass
-  label: string
-  colorVar: string
-  bgVar: string
-  borderVar: string
-  description: string
-}
-
-const INTENT_CLASSES: ClassConfig[] = [
-  {
-    key: 'legitimate',
-    label: 'Legitimate Transfer',
-    colorVar: 'var(--intent-legit)',
-    bgVar: 'var(--intent-legit-bg)',
-    borderVar: 'var(--intent-legit-border)',
-    description: 'Autonomous genuine customer intent',
-  },
-  {
-    key: 'social_engineering',
-    label: 'Social Engineering',
-    colorVar: 'var(--intent-social)',
-    bgVar: 'var(--intent-social-bg)',
-    borderVar: 'var(--intent-social-border)',
-    description: 'Authorized by customer under external coercion / deception',
-  },
-  {
-    key: 'account_takeover',
-    label: 'Account Takeover',
-    colorVar: 'var(--intent-ato)',
-    bgVar: 'var(--intent-ato-bg)',
-    borderVar: 'var(--intent-ato-border)',
-    description: 'Direct hostile unauthorized compromise of credentials',
-  },
-  {
-    key: 'accidental',
-    label: 'Accidental Transfer',
-    colorVar: 'var(--intent-accidental)',
-    bgVar: 'var(--intent-accidental-bg)',
-    borderVar: 'var(--intent-accidental-border)',
-    description: 'Human error, slip, typo, or unintentional transfer',
-  },
-]
 
 const DEFAULT_HYPOTHESES: Record<IntentClass, number> = {
   legitimate: 0.25,
@@ -59,9 +16,8 @@ const DEFAULT_HYPOTHESES: Record<IntentClass, number> = {
 }
 
 export function IntentDistribution({ intent, prevIntent }: IntentDistributionProps) {
-  const hypotheses = intent?.hypotheses ?? DEFAULT_HYPOTHESES
+  const hypotheses = (intent?.hypotheses as Record<IntentClass, number>) ?? DEFAULT_HYPOTHESES
 
-  // Determine dominant hypothesis
   const dominantKey = useMemo(() => {
     let maxK: IntentClass = 'legitimate'
     let maxV = -1
@@ -74,8 +30,13 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
     return maxV >= 0.4 ? maxK : null
   }, [hypotheses])
 
-  const uncertainty = intent?.uncertainty ?? 1.0
+  const dominantDelta = useMemo(() => {
+    if (!dominantKey || !prevIntent) return 0
+    const prev = prevIntent.hypotheses[dominantKey] ?? 0
+    return Math.round((hypotheses[dominantKey] - prev) * 100)
+  }, [dominantKey, hypotheses, prevIntent])
 
+  const uncertainty = intent?.uncertainty ?? 1.0
   const uncertaintySeverity =
     uncertainty >= 0.65 ? 'high' : uncertainty >= 0.35 ? 'moderate' : 'low'
 
@@ -83,7 +44,7 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
     <div className="panel intent-distribution-panel">
       <div className="panel-header">
         <div className="panel-title-group">
-          <h2 className="panel-title">Intent State Distribution</h2>
+          <h2 className="panel-title">Intent State</h2>
         </div>
         <div className="panel-actions">
           <span className="state-badge font-mono">
@@ -92,65 +53,26 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
         </div>
       </div>
 
+      <div className="intent-model-row font-mono">
+        <span>Model: Bayesian Trajectory Assessment</span>
+        <span className="intent-model-sep">·</span>
+        <span>Dynamic Prior</span>
+      </div>
+
       <div className="panel-body intent-body">
-        {/* Core 4-hypothesis probability meters */}
-        <div className="hypotheses-list">
-          {INTENT_CLASSES.map((cls) => {
-            const rawProb = hypotheses[cls.key] ?? 0
-            const percent = Math.round(rawProb * 100)
-            const isDominant = dominantKey === cls.key
-
-            // Calculate delta if previous intent exists
-            const prevProb = prevIntent?.hypotheses[cls.key]
-            const deltaPercent =
-              prevProb !== undefined ? Math.round((rawProb - prevProb) * 100) : 0
-
-            return (
-              <div
-                key={cls.key}
-                className={`hypothesis-row ${isDominant ? 'dominant' : ''}`}
-                style={
-                  {
-                    '--h-color': cls.colorVar,
-                    '--h-bg': cls.bgVar,
-                    '--h-border': cls.borderVar,
-                  } as React.CSSProperties
-                }
-              >
-                <div className="h-header">
-                  <div className="h-title-group">
-                    <span className="h-dot" />
-                    <span className="h-name">{cls.label}</span>
-                    {isDominant && <span className="dominant-pill">Dominant</span>}
-                  </div>
-                  <div className="h-metrics font-mono">
-                    {deltaPercent !== 0 && (
-                      <span
-                        className={`delta-badge tnum ${
-                          deltaPercent > 0 ? 'delta-up' : 'delta-down'
-                        }`}
-                      >
-                        {deltaPercent > 0 ? `+${deltaPercent}%` : `${deltaPercent}%`}
-                      </span>
-                    )}
-                    <span className="percent-val tnum">{percent}%</span>
-                  </div>
-                </div>
-
-                <div className="h-track">
-                  <div
-                    className="h-fill"
-                    style={{
-                      width: `${percent}%`,
-                      backgroundColor: cls.colorVar,
-                    }}
-                  />
-                </div>
-
-                <div className="h-caption">{cls.description}</div>
-              </div>
-            )
-          })}
+        <div className="intent-bar-section">
+          {dominantKey && (
+            <p className="intent-dominant-line">
+              <span className="h-dot" style={{ background: 'var(--intent-social)' }} />
+              Dominant: <strong>{dominantKey.replace('_', ' ')}</strong>
+              {dominantDelta !== 0 && (
+                <span className={`delta-badge tnum ${dominantDelta > 0 ? 'delta-up' : 'delta-down'}`}>
+                  {dominantDelta > 0 ? `+${dominantDelta}%` : `${dominantDelta}%`}
+                </span>
+              )}
+            </p>
+          )}
+          <IntentBarChart values={hypotheses} />
         </div>
 
         {/* Latent Uncertainty & Entropy Card */}
@@ -183,19 +105,12 @@ export function IntentDistribution({ intent, prevIntent }: IntentDistributionPro
 
           <p className="uncertainty-explainer">
             {uncertainty >= 0.65
-              ? 'High uncertainty: Competing explanations fit the evidence. Parallax avoids blocking prematurely and instead invokes an intent probe to query context.'
+              ? "HIGH means several explanations fit the evidence about equally well — the system genuinely doesn't know yet. Parallax avoids blocking on a guess and asks a clarifying question instead."
               : uncertainty >= 0.35
-              ? 'Moderate uncertainty: Evidence points towards a primary explanation, but auxiliary factors warrant verification.'
-              : 'Low uncertainty: Strong, converging behavioural evidence. Engine acts decisively with high confidence.'}
+                ? 'MODERATE means one explanation looks most likely, but there is enough ambiguity left that extra verification is worth the friction.'
+                : 'LOW means the evidence converges strongly on one explanation. The system acts on it directly — no need to ask.'}
           </p>
         </div>
-      </div>
-
-      <div className="panel-footer">
-        <span className="footer-label">Model:</span>
-        <span className="footer-val">Bayesian Trajectory Assessment</span>
-        <span className="footer-sep">·</span>
-        <span className="footer-tag">Dynamic Prior</span>
       </div>
     </div>
   )

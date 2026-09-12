@@ -157,6 +157,19 @@ export interface ScenarioInfo {
   expected_action: string
 }
 
+// One row from GET /v1/sessions — a session the backend has actually
+// observed (live feed traffic or anything ingested by any client).
+export interface LiveSessionRow {
+  session_id: string
+  user_id: string
+  event_count: number
+  last_event_type?: string
+  last_seen: number // unix seconds
+  dominant_intent?: string
+  confidence?: number
+  action?: string
+}
+
 export interface ScenarioRunResult {
   scenario: string
   session_id: string
